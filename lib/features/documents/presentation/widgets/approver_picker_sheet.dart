@@ -206,7 +206,7 @@ class _ApproverPickerSheetState
         final isSelected = _selected.any((u) => u.id == user.id);
         return Material(
           color: isSelected
-              ? AppColors.accent.withOpacity(0.08)
+              ? AppColors.accent.withValues(alpha: 0.08)
               : AppColors.surface,
           borderRadius: BorderRadius.circular(10),
           child: InkWell(
@@ -224,7 +224,7 @@ class _ApproverPickerSheetState
                 children: [
                   CircleAvatar(
                     radius: 18,
-                    backgroundColor: AppColors.primary.withOpacity(0.1),
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                     child: Text(
                       user.name.characters.first,
                       style: const TextStyle(

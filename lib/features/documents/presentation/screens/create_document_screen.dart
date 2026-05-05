@@ -192,9 +192,9 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
                       }),
             ),
             const SizedBox(height: 6),
-            Text(
+            const Text(
               'الأنواع المدعومة: PDF · DOC · DOCX · JPG · PNG · WEBP — حد أقصى 20 ميجابايت',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 color: AppColors.textSecondary,
               ),
@@ -334,7 +334,7 @@ class _FilePickerTile extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.08),
+                  color: AppColors.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
@@ -476,7 +476,7 @@ class _ModeOption extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   color: isSelected
-                      ? AppColors.white.withOpacity(0.85)
+                      ? AppColors.white.withValues(alpha: 0.85)
                       : AppColors.textSecondary,
                 ),
               ),
@@ -539,11 +539,11 @@ class _ApproversList extends StatelessWidget {
           )
         else ...[
           if (isSequential)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
               child: Text(
                 'الترتيب مهم — اسحب لإعادة الترتيب.',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   color: AppColors.textSecondary,
                 ),
@@ -592,7 +592,7 @@ class _ApproversList extends StatelessWidget {
                     else
                       CircleAvatar(
                         radius: 13,
-                        backgroundColor: AppColors.primary.withOpacity(0.1),
+                        backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                         child: Text(
                           user.name.characters.first,
                           style: const TextStyle(

@@ -29,7 +29,7 @@ class EmptyStateView extends StatelessWidget {
               width: 88,
               height: 88,
               decoration: BoxDecoration(
-                color: AppColors.accentSoft.withOpacity(0.15),
+                color: AppColors.accentSoft.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, size: 44, color: AppColors.accent),
@@ -83,7 +83,7 @@ class ErrorStateView extends StatelessWidget {
             Container(
               width: 88,
               height: 88,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: AppColors.statusRejectedBg,
                 shape: BoxShape.circle,
               ),

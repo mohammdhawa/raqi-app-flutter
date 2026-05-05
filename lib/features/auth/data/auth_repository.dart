@@ -33,15 +33,10 @@ class AuthRepository {
       data: {'email': email, 'password': password},
     );
     final data = response.data!;
-    print('LOGIN RESPONSE: $data');
     final token = data['token'] as String;
     final user = User.fromJson(data['user'] as Map<String, dynamic>);
 
-    print('LOGIN: token=$token');
-    print('LOGIN: user=${user.toJson()}');
     await _storage.write(token);
-    final saved = await _storage.read();
-    print('LOGIN: token saved? ${saved != null && saved.isNotEmpty}');
 
     await _storage.writeUserJson(jsonEncode(user.toJson()));
     return AuthResult(user: user, token: token);

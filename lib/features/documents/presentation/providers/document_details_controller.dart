@@ -25,17 +25,18 @@ class DocumentDetailsState {
     bool? isActing,
     ApiFailure? error,
     bool clearError = false,
-  }) => DocumentDetailsState(
-    document: document ?? this.document,
-    isLoading: isLoading ?? this.isLoading,
-    isActing: isActing ?? this.isActing,
-    error: clearError ? null : (error ?? this.error),
-  );
+  }) =>
+      DocumentDetailsState(
+        document: document ?? this.document,
+        isLoading: isLoading ?? this.isLoading,
+        isActing: isActing ?? this.isActing,
+        error: clearError ? null : (error ?? this.error),
+      );
 }
 
 class DocumentDetailsController extends StateNotifier<DocumentDetailsState> {
   DocumentDetailsController(this._repo, this.documentId)
-    : super(const DocumentDetailsState(isLoading: true)) {
+      : super(const DocumentDetailsState(isLoading: true)) {
     load();
   }
 
@@ -43,17 +44,17 @@ class DocumentDetailsController extends StateNotifier<DocumentDetailsState> {
   final int documentId;
 
   Future<void> load() async {
-  state = state.copyWith(isLoading: true, clearError: true);
-  try {
-    final doc = await _repo.getById(documentId);
-    if (!mounted) return;
-    state = DocumentDetailsState(document: doc);
-  } on Exception catch (e) {
-    if (!mounted) return;
-    state = state.copyWith(
-      isLoading: false,
-      error: e is ApiFailure ? e : null,
-    );
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final doc = await _repo.getById(documentId);
+      if (!mounted) return;
+      state = DocumentDetailsState(document: doc);
+    } on Exception catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(
+        isLoading: false,
+        error: e is ApiFailure ? e : null,
+      );
     }
   }
 
@@ -86,10 +87,7 @@ class DocumentDetailsController extends StateNotifier<DocumentDetailsState> {
 }
 
 final documentDetailsProvider = StateNotifierProvider.family<
-  DocumentDetailsController,
-  DocumentDetailsState,
-  int
->((ref, id) {
+    DocumentDetailsController, DocumentDetailsState, int>((ref, id) {
   return DocumentDetailsController(
     ref.watch(documentsRepositoryProvider),
     id,
