@@ -1,0 +1,55 @@
+name: doc_approval
+description: Document Approval Workflow mobile app.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Networking
+  dio: ^5.4.3+1
+
+  # Routing
+  go_router: ^14.0.2
+
+  # Storage
+  flutter_secure_storage: ^9.2.2
+  shared_preferences: ^2.2.3
+
+  # UI / Fonts
+  google_fonts: ^6.2.1
+  cached_network_image: ^3.3.1
+
+  # Files
+  file_picker: ^8.0.3
+  open_filex: ^4.4.0
+  path_provider: ^2.1.3
+
+  # Misc
+  intl: 0.20.2
+  freezed_annotation: ^2.4.1
+  json_annotation: ^4.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  build_runner: ^2.4.10
+  riverpod_generator: ^2.4.0
+  freezed: ^2.5.2
+  json_serializable: ^6.8.0
+
+flutter:
+  uses-material-design: true
+  # Cairo is loaded via google_fonts package — no font assets needed.
