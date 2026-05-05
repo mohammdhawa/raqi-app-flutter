@@ -178,8 +178,6 @@ class UnauthenticatedSignal {
   }
 }
 
-typedef VoidCallback = void Function();
-
 final apiClientProvider = Provider<ApiClient>((ref) {
   final storage = ref.watch(tokenStorageProvider);
   final signal = ref.watch(unauthenticatedSignalProvider);

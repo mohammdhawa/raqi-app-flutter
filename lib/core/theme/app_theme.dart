@@ -108,7 +108,7 @@ class AppTheme {
       ),
       tabBarTheme: TabBarThemeData(
         labelColor: AppColors.textOnPrimary,
-        unselectedLabelColor: AppColors.textOnPrimary.withOpacity(0.7),
+        unselectedLabelColor: AppColors.textOnPrimary.withValues(alpha: 0.7),
         indicatorColor: AppColors.accentSoft,
         indicatorSize: TabBarIndicatorSize.tab,
         labelStyle: GoogleFonts.cairo(

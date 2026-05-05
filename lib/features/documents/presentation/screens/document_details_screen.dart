@@ -4,8 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:dio/dio.dart';
-import 'dart:io';
 
 import '../../../../core/errors/api_failure.dart';
 import '../../../../core/network/api_client.dart';
@@ -68,7 +66,7 @@ class DocumentDetailsScreen extends ConsumerWidget {
                 const SizedBox(height: 12),
                 _WorkflowSection(document: doc),
                 const SizedBox(height: 16),
-                _SectionTitle(
+                const _SectionTitle(
                   icon: Icons.history,
                   title: 'سجل النشاط',
                 ),
@@ -188,7 +186,7 @@ class _Header extends StatelessWidget {
               document.description!,
               style: TextStyle(
                 fontSize: 13,
-                color: AppColors.white.withOpacity(0.9),
+                color: AppColors.white.withValues(alpha: 0.9),
                 height: 1.5,
               ),
             ),
@@ -199,28 +197,28 @@ class _Header extends StatelessWidget {
               Icon(
                 Icons.person_outline,
                 size: 14,
-                color: AppColors.white.withOpacity(0.9),
+                color: AppColors.white.withValues(alpha: 0.9),
               ),
               const SizedBox(width: 4),
               Text(
                 document.creator.name,
                 style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.white.withOpacity(0.9),
+                  color: AppColors.white.withValues(alpha: 0.9),
                 ),
               ),
               const SizedBox(width: 12),
               Icon(
                 Icons.schedule,
                 size: 14,
-                color: AppColors.white.withOpacity(0.9),
+                color: AppColors.white.withValues(alpha: 0.9),
               ),
               const SizedBox(width: 4),
               Text(
                 DateFormat('yyyy/MM/dd · HH:mm').format(document.createdAt),
                 style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.white.withOpacity(0.9),
+                  color: AppColors.white.withValues(alpha: 0.9),
                 ),
               ),
             ],
@@ -323,7 +321,7 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.08),
+                    color: AppColors.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
@@ -460,7 +458,7 @@ class _ParallelStepRow extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: 20,
-          backgroundColor: AppColors.primary.withOpacity(0.1),
+          backgroundColor: AppColors.primary.withValues(alpha: 0.1),
           child: Text(
             _initials(step.user.name),
             style: const TextStyle(
@@ -660,7 +658,7 @@ class _ActionBar extends StatelessWidget {
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: AppColors.surface,
           border: Border(top: BorderSide(color: AppColors.border)),
         ),

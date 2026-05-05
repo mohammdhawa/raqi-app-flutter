@@ -198,7 +198,7 @@ class _BrandHeader extends StatelessWidget {
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withOpacity(0.25),
+                color: AppColors.primary.withValues(alpha: 0.25),
                 blurRadius: 16,
                 offset: const Offset(0, 8),
               ),
