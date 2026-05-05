@@ -18,16 +18,39 @@ import '../providers/document_details_controller.dart';
 import '../providers/documents_list_controller.dart';
 import '../widgets/workflow_stepper.dart';
 
-class DocumentDetailsScreen extends ConsumerWidget {
+// ============================================================================
+// FIX: Changed from ConsumerWidget to ConsumerStatefulWidget.
+//
+// ConsumerWidget's ref is only valid for a single build() invocation.
+// The onApprove / onReject callbacks captured ref in a closure, but after
+// the first state emission (isActing: true) build() re-runs and the OLD
+// ref becomes invalid — any subsequent use of it (ref.read, ref.exists)
+// during the same async callback hits the '_dependents.isEmpty' assertion.
+//
+// ConsumerStatefulWidget's ref is tied to the State object's lifecycle,
+// so it stays valid across rebuilds and across async gaps.
+// ============================================================================
+
+class DocumentDetailsScreen extends ConsumerStatefulWidget {
   const DocumentDetailsScreen({super.key, required this.documentId});
 
   final int documentId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DocumentDetailsScreen> createState() =>
+      _DocumentDetailsScreenState();
+}
+
+class _DocumentDetailsScreenState
+    extends ConsumerState<DocumentDetailsScreen> {
+  int get documentId => widget.documentId;
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(documentDetailsProvider(documentId));
     final user = ref.watch(currentUserProvider);
-    final controller = ref.read(documentDetailsProvider(documentId).notifier);
+    final controller =
+        ref.read(documentDetailsProvider(documentId).notifier);
 
     return Scaffold(
       appBar: AppBar(
@@ -87,9 +110,8 @@ class DocumentDetailsScreen extends ConsumerWidget {
                 final updated = await controller.approve(note: note);
                 if (!context.mounted) return;
                 if (updated != null) {
-                  // Defer list mutations to the next frame so we don't tear down
-                  // widgets while the details screen is still settling.
                   WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
                     for (final type in DocumentListType.values) {
                       if (ref.exists(documentsListProvider(type))) {
                         ref
@@ -102,23 +124,28 @@ class DocumentDetailsScreen extends ConsumerWidget {
                     const SnackBar(content: Text('تم اعتماد المستند.')),
                   );
                 } else {
-                  _showErrorSnack(context, ref, documentId);
+                  _showErrorSnack(context);
                 }
               },
               onReject: (note) async {
                 final updated = await controller.reject(note: note);
-                if (!context.mounted) return;                       // ⬅ guard
+                if (!context.mounted) return;
                 if (updated != null) {
-                  for (final type in DocumentListType.values) {
-                    ref
-                        .read(documentsListProvider(type).notifier)
-                        .replaceDocument(updated);
-                  }
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    for (final type in DocumentListType.values) {
+                      if (ref.exists(documentsListProvider(type))) {
+                        ref
+                            .read(documentsListProvider(type).notifier)
+                            .replaceDocument(updated);
+                      }
+                    }
+                  });
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('تم رفض المستند.')),
                   );
                 } else {
-                  _showErrorSnack(context, ref, documentId);
+                  _showErrorSnack(context);
                 }
               },
             )
@@ -126,8 +153,8 @@ class DocumentDetailsScreen extends ConsumerWidget {
     );
   }
 
-  void _showErrorSnack(BuildContext context, WidgetRef ref, int id) {
-    final failure = ref.read(documentDetailsProvider(id)).error;
+  void _showErrorSnack(BuildContext context) {
+    final failure = ref.read(documentDetailsProvider(documentId)).error;
     if (failure == null || !context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -255,8 +282,6 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
     if (url == null) return;
     setState(() => _isOpening = true);
     try {
-      // Download via Dio (carries the auth token in case storage is gated)
-      // then hand off to the system viewer.
       final dir = await getTemporaryDirectory();
       final filename =
           widget.document.fileName ?? url.split('/').last;
@@ -644,7 +669,7 @@ class _ActionBar extends StatelessWidget {
   });
 
   final Document document;
-  final dynamic currentUser; // typed as User? but kept dynamic to avoid extra import
+  final dynamic currentUser;
   final bool isActing;
   final Future<void> Function(String? note) onApprove;
   final Future<void> Function(String? note) onReject;
