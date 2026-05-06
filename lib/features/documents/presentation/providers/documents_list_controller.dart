@@ -27,7 +27,10 @@ class DocumentsListState {
   final ApiFailure? error;
 
   bool get isEmpty =>
-      documents.isEmpty && !isLoadingFirstPage && !isRefreshing && error == null;
+      documents.isEmpty &&
+      !isLoadingFirstPage &&
+      !isRefreshing &&
+      error == null;
   bool get hasMore => currentPage < lastPage;
 
   DocumentsListState copyWith({
@@ -40,21 +43,23 @@ class DocumentsListState {
     bool? isRefreshing,
     ApiFailure? error,
     bool clearError = false,
-  }) => DocumentsListState(
-    documents: documents ?? this.documents,
-    currentPage: currentPage ?? this.currentPage,
-    lastPage: lastPage ?? this.lastPage,
-    total: total ?? this.total,
-    isLoadingFirstPage: isLoadingFirstPage ?? this.isLoadingFirstPage,
-    isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-    isRefreshing: isRefreshing ?? this.isRefreshing,
-    error: clearError ? null : (error ?? this.error),
-  );
+  }) =>
+      DocumentsListState(
+        documents: documents ?? this.documents,
+        currentPage: currentPage ?? this.currentPage,
+        lastPage: lastPage ?? this.lastPage,
+        total: total ?? this.total,
+        isLoadingFirstPage: isLoadingFirstPage ?? this.isLoadingFirstPage,
+        isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+        isRefreshing: isRefreshing ?? this.isRefreshing,
+        error: clearError ? null : (error ?? this.error),
+      );
 }
 
 class DocumentsListController extends StateNotifier<DocumentsListState> {
-  DocumentsListController(this._repo, this.type) : super(const DocumentsListState()) {
-    refresh();   // ← fires immediately when the controller is constructed
+  DocumentsListController(this._repo, this.type)
+      : super(const DocumentsListState()) {
+    refresh();
   }
 
   final DocumentsRepository _repo;
@@ -64,7 +69,7 @@ class DocumentsListController extends StateNotifier<DocumentsListState> {
     state = state.copyWith(isRefreshing: true, clearError: true);
     try {
       final page = await _repo.list(type: type, page: 1);
-      if (!mounted) return;                                    // ⬅ add
+      if (!mounted) return;
       state = DocumentsListState(
         documents: page.documents,
         currentPage: page.currentPage,
@@ -72,7 +77,7 @@ class DocumentsListController extends StateNotifier<DocumentsListState> {
         total: page.total,
       );
     } on Exception catch (e) {
-      if (!mounted) return;                                    // ⬅ add
+      if (!mounted) return;
       state = state.copyWith(
         isRefreshing: false,
         isLoadingFirstPage: false,
@@ -86,7 +91,7 @@ class DocumentsListController extends StateNotifier<DocumentsListState> {
     state = state.copyWith(isLoadingFirstPage: true, clearError: true);
     try {
       final page = await _repo.list(type: type, page: 1);
-      if (!mounted) return;                                    // ⬅ add
+      if (!mounted) return;
       state = DocumentsListState(
         documents: page.documents,
         currentPage: page.currentPage,
@@ -94,7 +99,7 @@ class DocumentsListController extends StateNotifier<DocumentsListState> {
         total: page.total,
       );
     } on Exception catch (e) {
-      if (!mounted) return;                                    // ⬅ add
+      if (!mounted) return;
       state = state.copyWith(
         isLoadingFirstPage: false,
         error: e is ApiFailure ? e : null,
@@ -110,7 +115,7 @@ class DocumentsListController extends StateNotifier<DocumentsListState> {
         type: type,
         page: state.currentPage + 1,
       );
-      if (!mounted) return;                                    // ⬅ add
+      if (!mounted) return;
       state = state.copyWith(
         documents: [...state.documents, ...page.documents],
         currentPage: page.currentPage,
@@ -119,7 +124,7 @@ class DocumentsListController extends StateNotifier<DocumentsListState> {
         isLoadingMore: false,
       );
     } on Exception catch (e) {
-      if (!mounted) return;                                    // ⬅ add
+      if (!mounted) return;
       state = state.copyWith(
         isLoadingMore: false,
         error: e is ApiFailure ? e : null,
@@ -128,20 +133,32 @@ class DocumentsListController extends StateNotifier<DocumentsListState> {
   }
 
   /// Replace a document in the list (after approve/reject completes).
+  /// No-op if the id isn't in our list.
   void replaceDocument(Document updated) {
-    final updatedList = [
-      for (final d in state.documents)
-        if (d.id == updated.id) updated else d,
-    ];
-    state = state.copyWith(documents: updatedList);
+    var found = false;
+    final next = <Document>[];
+    for (final d in state.documents) {
+      if (d.id == updated.id) {
+        next.add(updated);
+        found = true;
+      } else {
+        next.add(d);
+      }
+    }
+    if (!found) {
+      return;
+    }
+    state = state.copyWith(documents: next);
   }
 }
 
 /// Family of controllers — one per list type (inbox / sent).
 final documentsListProvider = StateNotifierProvider.family<
-  DocumentsListController,
-  DocumentsListState,
-  DocumentListType
->((ref, type) {
-  return DocumentsListController(ref.watch(documentsRepositoryProvider), type);
+    DocumentsListController,
+    DocumentsListState,
+    DocumentListType>((ref, type) {
+  return DocumentsListController(
+    ref.watch(documentsRepositoryProvider),
+    type,
+  );
 });

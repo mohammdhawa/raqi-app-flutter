@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,7 +8,14 @@ import 'core/theme/app_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ProviderScope(child: DocApprovalApp()));
+
+  // ── Instrumentation ───────────────────────────────────────────────────────
+
+  runApp(
+    const ProviderScope(
+      child: DocApprovalApp(),
+    ),
+  );
 }
 
 class DocApprovalApp extends ConsumerWidget {
@@ -32,7 +40,6 @@ class DocApprovalApp extends ConsumerWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       builder: (context, child) {
-        // Force RTL regardless of system locale.
         return Directionality(
           textDirection: TextDirection.rtl,
           child: child ?? const SizedBox.shrink(),

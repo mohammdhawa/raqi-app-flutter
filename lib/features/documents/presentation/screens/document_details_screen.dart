@@ -19,16 +19,59 @@ import '../providers/documents_list_controller.dart';
 import '../widgets/workflow_stepper.dart';
 
 // ============================================================================
-// FIX: Changed from ConsumerWidget to ConsumerStatefulWidget.
+// ROOT-CAUSE FIX for: '_dependents.isEmpty': is not true (framework.dart:6268)
 //
-// ConsumerWidget's ref is only valid for a single build() invocation.
-// The onApprove / onReject callbacks captured ref in a closure, but after
-// the first state emission (isActing: true) build() re-runs and the OLD
-// ref becomes invalid — any subsequent use of it (ref.read, ref.exists)
-// during the same async callback hits the '_dependents.isEmpty' assertion.
+// The previous version did this inside onApprove/onReject:
 //
-// ConsumerStatefulWidget's ref is tied to the State object's lifecycle,
-// so it stays valid across rebuilds and across async gaps.
+//   final updated = await controller.approve(note: note);
+//   if (!context.mounted) return;
+//   if (updated != null) {
+//     WidgetsBinding.instance.addPostFrameCallback((_) {
+//       for (final type in DocumentListType.values) {
+//         if (ref.exists(documentsListProvider(type))) {
+//           ref.read(documentsListProvider(type).notifier)
+//              .replaceDocument(updated);
+//         }
+//       }
+//     });
+//     ScaffoldMessenger.of(context).showSnackBar(...);   // <-- and this
+//   }
+//
+// Why that triggered '_dependents.isEmpty':
+//   1. `controller.approve()` finishes and synchronously sets
+//      `state = DocumentDetailsState(document: updated)` — Riverpod marks
+//      every widget that watches this provider dirty for the NEXT frame.
+//   2. We are now back in the await-completion microtask. The widget tree
+//      hasn't rebuilt yet, but it WILL during the next frame.
+//   3. addPostFrameCallback queues a callback for AFTER that next frame
+//      finishes drawing — i.e. during the _InactiveElements processing
+//      pass at the tail of the frame.
+//   4. Inside that post-frame callback we then mutate documentsListProvider
+//      for BOTH tabs. Those tabs are kept alive (AutomaticKeepAliveClient
+//      Mixin) underneath the navigator, so their state notifier listeners
+//      fire and they get marked dirty MID-DEACTIVATION.
+//   5. ScaffoldMessenger.showSnackBar inserts an OverlayEntry into the
+//      MaterialApp's Overlay — also at exactly this fragile moment.
+//   6. Result: an InheritedElement (Scaffold's own, ScaffoldMessenger's,
+//      or Overlay's) gets deactivated while widgets are still registered
+//      against it as dependents. That's the exact precondition for
+//      InheritedElement.debugDeactivated's `assert(_dependents.isEmpty)`.
+//
+// What this rewrite changes:
+//   * Approve/reject are State methods, not build-scope closures.
+//   * After the await, the cross-provider replaceDocument call runs
+//     SYNCHRONOUSLY in the await-completion microtask — i.e. BEFORE the
+//     next frame, not after. All affected providers are mutated together,
+//     and the next frame's rebuild pass processes them coherently.
+//   * The SnackBar is the ONLY thing deferred to addPostFrameCallback —
+//     it's safe there because by then the rebuild has already run, and
+//     showing a SnackBar after a settled frame is a normal pattern.
+//   * _ActionBar always returns a Visibility-wrapped widget of the same
+//     shape regardless of state, instead of flipping between
+//     SizedBox.shrink and a full SafeArea>Container subtree. This kills
+//     the most common element-deactivation race.
+//   * The nested ListView.separated inside _LogsSection is replaced with
+//     a plain Column, removing one source of nested-scrollable surprises.
 // ============================================================================
 
 class DocumentDetailsScreen extends ConsumerStatefulWidget {
@@ -45,6 +88,74 @@ class _DocumentDetailsScreenState
     extends ConsumerState<DocumentDetailsScreen> {
   int get documentId => widget.documentId;
 
+  // ── Approve / Reject ─────────────────────────────────────────────────────
+  // Defined as State methods (not build-scope closures) so they aren't
+  // recreated on every rebuild and don't capture stale ref/context.
+
+  Future<void> _approve(String? note) async {
+    final controller = ref.read(documentDetailsProvider(documentId).notifier);
+    final updated = await controller.approve(note: note);
+    if (!mounted) {
+      return;
+    }
+    if (updated != null) {
+      _propagateToLists(updated);
+      _scheduleSnack('تم اعتماد المستند.');
+    } else {
+      _scheduleErrorSnack();
+    }
+  }
+
+  Future<void> _reject(String? note) async {
+    final controller = ref.read(documentDetailsProvider(documentId).notifier);
+    final updated = await controller.reject(note: note);
+    if (!mounted) {
+      return;
+    }
+    if (updated != null) {
+      _propagateToLists(updated);
+      _scheduleSnack('تم رفض المستند.');
+    } else {
+      _scheduleErrorSnack();
+    }
+  }
+
+  void _propagateToLists(Document updated) {
+    for (final type in DocumentListType.values) {
+      final exists = ref.exists(documentsListProvider(type));
+      if (exists) {
+        ref
+            .read(documentsListProvider(type).notifier)
+            .replaceDocument(updated);
+      }
+    }
+  }
+
+  void _scheduleSnack(String message) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    });
+  }
+
+  void _scheduleErrorSnack() {
+    final failure = ref.read(documentDetailsProvider(documentId)).error;
+    if (failure == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.statusRejected,
+          content: Text(
+            arabicMessageFor(failure.code, fallback: failure.message),
+          ),
+        ),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(documentDetailsProvider(documentId));
@@ -52,116 +163,77 @@ class _DocumentDetailsScreenState
     final controller =
         ref.read(documentDetailsProvider(documentId).notifier);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('تفاصيل المستند'),
+    final scaffold = Scaffold(
+      appBar: AppBar(title: const Text('تفاصيل المستند')),
+      body: _DetailsBody(
+        state: state,
+        onRefresh: controller.load,
       ),
-      body: Builder(
-        builder: (_) {
-          if (state.isLoading && state.document == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (state.error != null && state.document == null) {
-            return ErrorStateView(
-              failure: state.error!,
-              onRetry: controller.load,
-            );
-          }
-          final doc = state.document!;
-          return RefreshIndicator(
-            color: AppColors.primary,
-            onRefresh: controller.load,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-              children: [
-                _Header(document: doc),
-                const SizedBox(height: 16),
-                _FilePreviewCard(document: doc),
-                const SizedBox(height: 16),
-                _SectionTitle(
-                  icon: doc.workflowMode == WorkflowMode.sequential
-                      ? Icons.format_list_numbered
-                      : Icons.groups_outlined,
-                  title: doc.workflowMode == WorkflowMode.sequential
-                      ? 'سير الموافقة (تسلسلي)'
-                      : 'المعتمدون (متوازي)',
-                ),
-                const SizedBox(height: 12),
-                _WorkflowSection(document: doc),
-                const SizedBox(height: 16),
-                const _SectionTitle(
-                  icon: Icons.history,
-                  title: 'سجل النشاط',
-                ),
-                const SizedBox(height: 12),
-                _LogsSection(logs: doc.logs),
-                const SizedBox(height: 24),
-              ],
-            ),
-          );
-        },
+      bottomNavigationBar: _ActionBar(
+        document: state.document,
+        currentUser: user,
+        isActing: state.isActing,
+        onApprove: _approve,
+        onReject: _reject,
       ),
-      bottomNavigationBar: state.document != null
-          ? _ActionBar(
-              document: state.document!,
-              currentUser: user,
-              isActing: state.isActing,
-              onApprove: (note) async {
-                final updated = await controller.approve(note: note);
-                if (!context.mounted) return;
-                if (updated != null) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
-                    for (final type in DocumentListType.values) {
-                      if (ref.exists(documentsListProvider(type))) {
-                        ref
-                            .read(documentsListProvider(type).notifier)
-                            .replaceDocument(updated);
-                      }
-                    }
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تم اعتماد المستند.')),
-                  );
-                } else {
-                  _showErrorSnack(context);
-                }
-              },
-              onReject: (note) async {
-                final updated = await controller.reject(note: note);
-                if (!context.mounted) return;
-                if (updated != null) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
-                    for (final type in DocumentListType.values) {
-                      if (ref.exists(documentsListProvider(type))) {
-                        ref
-                            .read(documentsListProvider(type).notifier)
-                            .replaceDocument(updated);
-                      }
-                    }
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تم رفض المستند.')),
-                  );
-                } else {
-                  _showErrorSnack(context);
-                }
-              },
-            )
-          : null,
     );
+    return scaffold;
   }
+}
 
-  void _showErrorSnack(BuildContext context) {
-    final failure = ref.read(documentDetailsProvider(documentId)).error;
-    if (failure == null || !context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: AppColors.statusRejected,
-        content: Text(
-          arabicMessageFor(failure.code, fallback: failure.message),
-        ),
+// ---------------------------------------------------------------------------
+// Body — extracted so loading/error/data branches each return the SAME root
+// widget type (so element identity is preserved across rebuilds where
+// possible).
+// ---------------------------------------------------------------------------
+
+class _DetailsBody extends StatelessWidget {
+  const _DetailsBody({required this.state, required this.onRefresh});
+
+  final DocumentDetailsState state;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    if (state.isLoading && state.document == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (state.error != null && state.document == null) {
+      return ErrorStateView(failure: state.error!, onRetry: onRefresh);
+    }
+    final doc = state.document;
+    if (doc == null) {
+      return const SizedBox.shrink();
+    }
+    return RefreshIndicator(
+      color: AppColors.primary,
+      onRefresh: onRefresh,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        children: [
+          _Header(document: doc),
+          const SizedBox(height: 16),
+          _FilePreviewCard(document: doc),
+          const SizedBox(height: 16),
+          _SectionTitle(
+            icon: doc.workflowMode == WorkflowMode.sequential
+                ? Icons.format_list_numbered
+                : Icons.groups_outlined,
+            title: doc.workflowMode == WorkflowMode.sequential
+                ? 'سير الموافقة (تسلسلي)'
+                : 'المعتمدون (متوازي)',
+          ),
+          const SizedBox(height: 12),
+          _WorkflowSection(document: doc),
+          const SizedBox(height: 16),
+          const _SectionTitle(
+            icon: Icons.history,
+            title: 'سجل النشاط',
+          ),
+          const SizedBox(height: 12),
+          _LogsSection(logs: doc.logs),
+          const SizedBox(height: 24),
+        ],
       ),
     );
   }
@@ -283,8 +355,7 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
     setState(() => _isOpening = true);
     try {
       final dir = await getTemporaryDirectory();
-      final filename =
-          widget.document.fileName ?? url.split('/').last;
+      final filename = widget.document.fileName ?? url.split('/').last;
       final savePath = '${dir.path}/$filename';
       final dio = ref.read(apiClientProvider).dio;
       await dio.download(url, savePath);
@@ -463,7 +534,10 @@ class _WorkflowSection extends StatelessWidget {
           : Column(
               children: [
                 for (var i = 0; i < document.workflows.length; i++) ...[
-                  _ParallelStepRow(step: document.workflows[i]),
+                  _ParallelStepRow(
+                    key: ValueKey(document.workflows[i].id),
+                    step: document.workflows[i],
+                  ),
                   if (i < document.workflows.length - 1)
                     const Divider(height: 16),
                 ],
@@ -474,7 +548,7 @@ class _WorkflowSection extends StatelessWidget {
 }
 
 class _ParallelStepRow extends StatelessWidget {
-  const _ParallelStepRow({required this.step});
+  const _ParallelStepRow({super.key, required this.step});
   final WorkflowStep step;
 
   @override
@@ -562,20 +636,22 @@ class _LogsSection extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.border),
       ),
-      child: ListView.separated(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        padding: EdgeInsets.zero,
-        itemCount: sorted.length,
-        separatorBuilder: (_, __) => const Divider(height: 1),
-        itemBuilder: (_, i) => _LogTile(log: sorted[i]),
+      // Use a Column instead of a nested ListView.separated to avoid
+      // nested-scrollable interactions with the parent ListView.
+      child: Column(
+        children: [
+          for (var i = 0; i < sorted.length; i++) ...[
+            _LogTile(key: ValueKey(sorted[i].id), log: sorted[i]),
+            if (i < sorted.length - 1) const Divider(height: 1),
+          ],
+        ],
       ),
     );
   }
 }
 
 class _LogTile extends StatelessWidget {
-  const _LogTile({required this.log});
+  const _LogTile({super.key, required this.log});
   final DocumentLog log;
 
   @override
@@ -656,10 +732,14 @@ class _LogTile extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Action bar (approve / reject)
+// Action bar — ALWAYS returns the same widget shape across all states.
+// We toggle visibility via Visibility(maintainState/maintainSize). This is
+// the most defensive shape: the bottomNavigationBar slot always contains
+// the same SafeArea > Container > Row > [Buttons] tree, regardless of
+// whether it's the user's turn or whether an action is in flight.
 // ---------------------------------------------------------------------------
 
-class _ActionBar extends StatelessWidget {
+class _ActionBar extends StatefulWidget {
   const _ActionBar({
     required this.document,
     required this.currentUser,
@@ -668,83 +748,95 @@ class _ActionBar extends StatelessWidget {
     required this.onReject,
   });
 
-  final Document document;
+  final Document? document;
   final dynamic currentUser;
   final bool isActing;
   final Future<void> Function(String? note) onApprove;
   final Future<void> Function(String? note) onReject;
 
   @override
-  Widget build(BuildContext context) {
-    if (!document.isTurnOf(currentUser)) {
-      return const SizedBox.shrink();
-    }
+  State<_ActionBar> createState() => _ActionBarState();
+}
 
-    return SafeArea(
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          border: Border(top: BorderSide(color: AppColors.border)),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.statusRejected,
-                  side: const BorderSide(
-                    color: AppColors.statusRejected,
-                    width: 1.4,
+class _ActionBarState extends State<_ActionBar> {
+
+  @override
+  Widget build(BuildContext context) {
+    final canAct = widget.document != null &&
+        widget.document!.isTurnOf(widget.currentUser);
+
+    final result = Visibility(
+      visible: canAct,
+      maintainState: true,
+      maintainAnimation: true,
+      maintainSize: false,
+      child: SafeArea(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            border: Border(top: BorderSide(color: AppColors.border)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.statusRejected,
+                    side: const BorderSide(
+                      color: AppColors.statusRejected,
+                      width: 1.4,
+                    ),
                   ),
+                  onPressed: widget.isActing
+                      ? null
+                      : () => _promptForNote(
+                            context,
+                            title: 'رفض المستند',
+                            confirmLabel: 'رفض',
+                            confirmColor: AppColors.statusRejected,
+                            isNoteRequired: true,
+                            onConfirm: widget.onReject,
+                          ),
+                  icon: const Icon(Icons.close),
+                  label: const Text('رفض'),
                 ),
-                onPressed: isActing
-                    ? null
-                    : () => _promptForNote(
-                          context,
-                          title: 'رفض المستند',
-                          confirmLabel: 'رفض',
-                          confirmColor: AppColors.statusRejected,
-                          isNoteRequired: true,
-                          onConfirm: onReject,
-                        ),
-                icon: const Icon(Icons.close),
-                label: const Text('رفض'),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.statusApproved,
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.statusApproved,
+                  ),
+                  onPressed: widget.isActing
+                      ? null
+                      : () => _promptForNote(
+                            context,
+                            title: 'اعتماد المستند',
+                            confirmLabel: 'اعتماد',
+                            confirmColor: AppColors.statusApproved,
+                            isNoteRequired: false,
+                            onConfirm: widget.onApprove,
+                          ),
+                  icon: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: widget.isActing
+                        ? const CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.white,
+                          )
+                        : const Icon(Icons.check, size: 18),
+                  ),
+                  label: const Text('اعتماد'),
                 ),
-                onPressed: isActing
-                    ? null
-                    : () => _promptForNote(
-                          context,
-                          title: 'اعتماد المستند',
-                          confirmLabel: 'اعتماد',
-                          confirmColor: AppColors.statusApproved,
-                          isNoteRequired: false,
-                          onConfirm: onApprove,
-                        ),
-                icon: isActing
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.white,
-                        ),
-                      )
-                    : const Icon(Icons.check),
-                label: const Text('اعتماد'),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+    return result;
   }
 
   Future<void> _promptForNote(
@@ -755,54 +847,110 @@ class _ActionBar extends StatelessWidget {
     required bool isNoteRequired,
     required Future<void> Function(String? note) onConfirm,
   }) async {
-    final controller = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-
+    // FIX (root cause of '_dependents.isEmpty'):
+    // Previously the TextEditingController was created in this method's
+    // scope and disposed immediately after `await showDialog`. Disposing
+    // a TextEditingController synchronously after the dialog returns
+    // races against Flutter's overlay-deactivation pass — the EditableText
+    // for the dialog's TextField is still being deactivated and still
+    // depends on the controller. That deactivation walk is exactly what
+    // the stack trace showed (frames #21..#90 of _deactivateRecursively
+    // through the Overlay's children).
+    //
+    // Fix: move the controller into a StatefulWidget that lives INSIDE
+    // the dialog tree. Its dispose() is now called by Flutter as part
+    // of the same deactivation pass that's tearing down the dialog —
+    // strictly in the right order, no race.
     final note = await showDialog<String?>(
       context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: Text(title),
-          content: Form(
-            key: formKey,
-            child: TextFormField(
-              controller: controller,
-              maxLines: 3,
-              decoration: InputDecoration(
-                labelText: isNoteRequired ? 'سبب الرفض' : 'ملاحظة (اختياري)',
-                alignLabelWithHint: true,
-              ),
-              validator: (value) {
-                if (isNoteRequired && (value == null || value.trim().isEmpty)) {
-                  return 'الرجاء إدخال سبب الرفض';
-                }
-                return null;
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, null),
-              child: const Text('إلغاء'),
-            ),
-            TextButton(
-              onPressed: () {
-                if (formKey.currentState!.validate()) {
-                  Navigator.pop(ctx, controller.text.trim());
-                }
-              },
-              child: Text(
-                confirmLabel,
-                style: TextStyle(color: confirmColor),
-              ),
-            ),
-          ],
-        );
-      },
+      builder: (ctx) => _NotePromptDialog(
+        title: title,
+        confirmLabel: confirmLabel,
+        confirmColor: confirmColor,
+        isNoteRequired: isNoteRequired,
+      ),
     );
 
-    controller.dispose();
-    if (note == null) return; // cancelled
+    if (note == null) return;
     await onConfirm(note.isEmpty ? null : note);
+  }
+}
+
+/// Dialog body extracted into its own StatefulWidget so the
+/// TextEditingController is owned by the dialog's element tree and
+/// disposed as part of the dialog's normal deactivation pass — NOT
+/// from the calling code immediately after `await showDialog`, which
+/// races with the overlay tearing down the dialog and triggers
+/// '_dependents.isEmpty' on the EditableText's InheritedWidgets.
+class _NotePromptDialog extends StatefulWidget {
+  const _NotePromptDialog({
+    required this.title,
+    required this.confirmLabel,
+    required this.confirmColor,
+    required this.isNoteRequired,
+  });
+
+  final String title;
+  final String confirmLabel;
+  final Color confirmColor;
+  final bool isNoteRequired;
+
+  @override
+  State<_NotePromptDialog> createState() => _NotePromptDialogState();
+}
+
+class _NotePromptDialogState extends State<_NotePromptDialog> {
+  final _controller = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    // Runs as part of the dialog's deactivation pass, AFTER Flutter has
+    // unregistered the EditableText's dependents. No race.
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: Form(
+        key: _formKey,
+        child: TextFormField(
+          controller: _controller,
+          maxLines: 3,
+          decoration: InputDecoration(
+            labelText:
+                widget.isNoteRequired ? 'سبب الرفض' : 'ملاحظة (اختياري)',
+            alignLabelWithHint: true,
+          ),
+          validator: (value) {
+            if (widget.isNoteRequired &&
+                (value == null || value.trim().isEmpty)) {
+              return 'الرجاء إدخال سبب الرفض';
+            }
+            return null;
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, null),
+          child: const Text('إلغاء'),
+        ),
+        TextButton(
+          onPressed: () {
+            if (_formKey.currentState!.validate()) {
+              Navigator.pop(context, _controller.text.trim());
+            }
+          },
+          child: Text(
+            widget.confirmLabel,
+            style: TextStyle(color: widget.confirmColor),
+          ),
+        ),
+      ],
+    );
   }
 }

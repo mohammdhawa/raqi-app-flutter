@@ -58,14 +58,14 @@ class DocumentDetailsController extends StateNotifier<DocumentDetailsState> {
     }
   }
 
-  /// Returns the updated document on success so the caller can also push
-  /// it back into the inbox/sent list state.
   Future<Document?> approve({String? note}) async {
-    return _act(() => _repo.approve(documentId, note: note));
+    final r = await _act(() => _repo.approve(documentId, note: note));
+    return r;
   }
 
   Future<Document?> reject({String? note}) async {
-    return _act(() => _repo.reject(documentId, note: note));
+    final r = await _act(() => _repo.reject(documentId, note: note));
+    return r;
   }
 
   Future<Document?> _act(Future<Document> Function() action) async {
