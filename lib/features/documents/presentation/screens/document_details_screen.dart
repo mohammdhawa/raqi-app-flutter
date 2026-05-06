@@ -17,6 +17,7 @@ import '../../domain/document.dart';
 import '../providers/document_details_controller.dart';
 import '../providers/documents_list_controller.dart';
 import '../widgets/workflow_stepper.dart';
+import 'package:dio/dio.dart';
 
 // ============================================================================
 // ROOT-CAUSE FIX for: '_dependents.isEmpty': is not true (framework.dart:6268)
@@ -350,17 +351,26 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
   }
 
   Future<void> _openExternally() async {
-    final url = _fileUrl;
-    if (url == null) return;
-    setState(() => _isOpening = true);
-    try {
-      final dir = await getTemporaryDirectory();
-      final filename = widget.document.fileName ?? url.split('/').last;
-      final savePath = '${dir.path}/$filename';
-      final dio = ref.read(apiClientProvider).dio;
-      await dio.download(url, savePath);
-      await OpenFilex.open(savePath);
-    } catch (_) {
+  final url = _fileUrl;
+  if (url == null) return;
+  setState(() => _isOpening = true);
+  try {
+    final dir = await getTemporaryDirectory();
+    final filename = widget.document.fileName ?? url.split('/').last;
+    final savePath = '${dir.path}/$filename';
+
+    // Use a bare Dio — no auth interceptor needed for public storage files
+    final dio = Dio();
+    await dio.download(url, savePath);
+
+    final result = await OpenFilex.open(savePath);
+    if (result.type != ResultType.done && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر فتح الملف: ${result.message}')),
+      );
+    }
+  } catch (e) {
+      debugPrint('File open error: $e'); // ← actually see what's failing
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تعذر فتح الملف.')),
