@@ -1,9 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:open_filex/open_filex.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 import '../../../../core/errors/api_failure.dart';
 import '../../../../core/network/api_client.dart';
@@ -17,6 +17,7 @@ import '../../domain/document.dart';
 import '../providers/document_details_controller.dart';
 import '../providers/documents_list_controller.dart';
 import '../widgets/workflow_stepper.dart';
+import '../../../../core/storage/token_storage.dart';
 
 // ============================================================================
 // ROOT-CAUSE FIX for: '_dependents.isEmpty': is not true (framework.dart:6268)
@@ -331,6 +332,9 @@ class _Header extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // File preview
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// File preview card
+// ---------------------------------------------------------------------------
 
 class _FilePreviewCard extends ConsumerStatefulWidget {
   const _FilePreviewCard({required this.document});
@@ -341,33 +345,62 @@ class _FilePreviewCard extends ConsumerStatefulWidget {
 }
 
 class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
-  bool _isOpening = false;
-
   String? get _fileUrl {
     final path = widget.document.filePath;
     if (path == null) return null;
     return '${AppConstants.storageBase}/storage/$path';
   }
 
-  Future<void> _openExternally() async {
+  // Detect type from mime first, then fall back to extension
+  bool get _isPdf {
+    final mime = widget.document.fileMime ?? '';
+    if (mime.isNotEmpty) return mime == 'application/pdf';
+    return (widget.document.filePath ?? '').toLowerCase().endsWith('.pdf');
+  }
+
+  bool get _isImage {
+    final mime = widget.document.fileMime ?? '';
+    if (mime.isNotEmpty) return mime.startsWith('image/');
+    final ext = (widget.document.filePath ?? '').toLowerCase().split('.').last;
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
+  }
+
+  Future<void> _openPreview() async {
     final url = _fileUrl;
     if (url == null) return;
-    setState(() => _isOpening = true);
-    try {
-      final dir = await getTemporaryDirectory();
-      final filename = widget.document.fileName ?? url.split('/').last;
-      final savePath = '${dir.path}/$filename';
-      final dio = ref.read(apiClientProvider).dio;
-      await dio.download(url, savePath);
-      await OpenFilex.open(savePath);
-    } catch (_) {
+
+    if (_isPdf) {
+      // Get auth token for PDF viewer
+      final storage = ref.read(tokenStorageProvider);
+      final token = await storage.read();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierColor: Colors.black87,
+        builder: (_) => _PdfPreviewDialog(
+          url: url,
+          fileName: widget.document.fileName ??
+              url.split('/').last,
+          token: token,
+        ),
+      );
+    } else if (_isImage) {
+      await showDialog<void>(
+        context: context,
+        barrierColor: Colors.black87,
+        builder: (_) => _ImagePreviewDialog(
+          url: url,
+          fileName: widget.document.fileName ??
+              url.split('/').last,
+        ),
+      );
+    } else {
+      // Unsupported type
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذر فتح الملف.')),
+          const SnackBar(content: Text('معاينة هذا النوع من الملفات غير مدعومة.')),
         );
       }
-    } finally {
-      if (mounted) setState(() => _isOpening = false);
     }
   }
 
@@ -384,27 +417,61 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
       ),
       child: Column(
         children: [
-          if (doc.isImage() && url != null)
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(14),
-              ),
-              child: AspectRatio(
-                aspectRatio: 16 / 10,
-                child: CachedNetworkImage(
-                  imageUrl: url,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(
-                    color: AppColors.background,
-                    child: const Center(child: CircularProgressIndicator()),
-                  ),
-                  errorWidget: (_, __, ___) => Container(
-                    color: AppColors.background,
-                    child: const Icon(
-                      Icons.broken_image_outlined,
-                      size: 48,
-                      color: AppColors.textSecondary,
-                    ),
+          // Tappable thumbnail for images
+          if (_isImage && url != null)
+            GestureDetector(
+              onTap: _openPreview,
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(14),
+                ),
+                child: AspectRatio(
+                  aspectRatio: 16 / 10,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CachedNetworkImage(
+                        imageUrl: url,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(
+                          color: AppColors.background,
+                          child: const Center(
+                              child: CircularProgressIndicator()),
+                        ),
+                        errorWidget: (_, __, ___) => Container(
+                          color: AppColors.background,
+                          child: const Icon(
+                            Icons.broken_image_outlined,
+                            size: 48,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                      // Zoom hint overlay
+                      Positioned(
+                        bottom: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.zoom_in,
+                                  color: Colors.white, size: 14),
+                              SizedBox(width: 4),
+                              Text('معاينة',
+                                  style: TextStyle(
+                                      color: Colors.white, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -421,9 +488,9 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
-                    doc.isPdf()
+                    _isPdf
                         ? Icons.picture_as_pdf_outlined
-                        : doc.isImage()
+                        : _isImage
                             ? Icons.image_outlined
                             : Icons.insert_drive_file_outlined,
                     color: AppColors.primary,
@@ -454,20 +521,15 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
                     ],
                   ),
                 ),
-                IconButton(
-                  tooltip: 'فتح الملف',
-                  onPressed: _isOpening ? null : _openExternally,
-                  icon: _isOpening
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(
-                          Icons.open_in_new,
-                          color: AppColors.primary,
-                        ),
-                ),
+                if (url != null)
+                  IconButton(
+                    tooltip: 'معاينة الملف',
+                    onPressed: _openPreview,
+                    icon: const Icon(
+                      Icons.visibility_outlined,
+                      color: AppColors.primary,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -479,8 +541,158 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
   String _formatSize(int? bytes) {
     if (bytes == null) return '';
     if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
     return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Image preview — full-screen, pinch-to-zoom, tap background to dismiss
+// ---------------------------------------------------------------------------
+
+class _ImagePreviewDialog extends StatelessWidget {
+  const _ImagePreviewDialog({required this.url, required this.fileName});
+  final String url;
+  final String fileName;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog.fullscreen(
+      backgroundColor: Colors.transparent,
+      child: Stack(
+        children: [
+          // Tap outside image to dismiss
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(color: Colors.black87),
+          ),
+          // Pinch-to-zoom image
+          Center(
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 5.0,
+              child: CachedNetworkImage(
+                imageUrl: url,
+                fit: BoxFit.contain,
+                placeholder: (_, __) => const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                ),
+                errorWidget: (_, __, ___) => const Center(
+                  child: Icon(Icons.broken_image_outlined,
+                      color: Colors.white54, size: 64),
+                ),
+              ),
+            ),
+          ),
+          // Top bar
+          SafeArea(
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.black38,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      fileName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PDF preview — full-screen SfPdfViewer with auth header
+// ---------------------------------------------------------------------------
+
+class _PdfPreviewDialog extends StatelessWidget {
+  const _PdfPreviewDialog({
+    required this.url,
+    required this.fileName,
+    this.token,
+  });
+  final String url;
+  final String fileName;
+  final String? token;
+
+  @override
+  Widget build(BuildContext context) {
+    final headers = <String, String>{
+      'Accept': 'application/pdf',
+      if (token != null && token!.isNotEmpty)
+        'Authorization': 'Bearer $token',
+    };
+
+    return Dialog.fullscreen(
+      backgroundColor: Colors.black87,
+      child: SafeArea(
+        child: Column(
+          children: [
+            // Top bar
+            Container(
+              color: Colors.black87,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.black38,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      fileName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // PDF viewer
+            Expanded(
+              child: SfPdfViewer.network(
+                url,
+                headers: headers,
+                canShowScrollHead: true,
+                canShowScrollStatus: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
