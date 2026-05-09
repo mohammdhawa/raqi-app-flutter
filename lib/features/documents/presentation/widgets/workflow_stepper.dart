@@ -47,8 +47,10 @@ class _StepRow extends StatelessWidget {
         AppColors.statusRejected,
         Icons.close,
       ),
-      _ => (AppColors.statusPending, null),
+      _ => (step.isChief ? AppColors.primary : AppColors.statusPending, null),
     };
+
+    final circleSize = step.isChief ? 38.0 : 32.0;
 
     return IntrinsicHeight(
       child: Row(
@@ -57,23 +59,25 @@ class _StepRow extends StatelessWidget {
           Column(
             children: [
               Container(
-                width: 32,
-                height: 32,
+                width: circleSize,
+                height: circleSize,
                 decoration: BoxDecoration(
                   color: color,
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
                 child: icon != null
-                    ? Icon(icon, color: AppColors.white, size: 18)
-                    : Text(
-                        '${step.order}',
-                        style: const TextStyle(
-                          color: AppColors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
-                        ),
-                      ),
+                    ? Icon(icon, color: AppColors.white, size: step.isChief ? 22 : 18)
+                    : step.isChief
+                        ? const Icon(Icons.shield_outlined, color: AppColors.white, size: 20)
+                        : Text(
+                            '${step.order}',
+                            style: const TextStyle(
+                              color: AppColors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
+                          ),
               ),
               if (!isLast)
                 Expanded(
@@ -107,9 +111,14 @@ class _StepBody extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: step.isChief
+            ? AppColors.primary.withValues(alpha: 0.04)
+            : AppColors.background,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+          color: step.isChief ? AppColors.primary : AppColors.border,
+          width: step.isChief ? 1.5 : 1.0,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -117,13 +126,40 @@ class _StepBody extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  step.user.name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    color: AppColors.textPrimary,
-                  ),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        step.user.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    if (step.isChief) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'المسؤول الأعلى',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               _statusLabel(step.status),

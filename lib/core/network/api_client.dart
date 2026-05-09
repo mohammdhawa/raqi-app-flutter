@@ -35,7 +35,7 @@ class ApiClient {
           // Remove 'Content-Type': 'application/json'
           // Dio sets it automatically — multipart needs its own boundary
         },
-        validateStatus: (s) => s != null && s < 500,
+        validateStatus: (s) => s != null && s <= 500,
       ),
     );
 
@@ -126,8 +126,20 @@ class ApiClient {
       }
     }
 
+    // If no structured error code, try to match known backend messages.
+    ApiErrorCode resolvedCode = ApiErrorCode.fromString(errorCode);
+    if (resolvedCode == ApiErrorCode.unknown && errorCode == null) {
+      final lc = message.toLowerCase();
+      if (lc.contains('chief cannot act') ||
+          lc.contains('all managers have made their decisions')) {
+        resolvedCode = ApiErrorCode.chiefCannotActYet;
+      } else if (lc.contains('chief user already exists')) {
+        resolvedCode = ApiErrorCode.chiefAlreadyExists;
+      }
+    }
+
     return ApiFailure(
-      code: ApiErrorCode.fromString(errorCode),
+      code: resolvedCode,
       message: message,
       statusCode: response.statusCode,
       fieldErrors: fieldErrors,
