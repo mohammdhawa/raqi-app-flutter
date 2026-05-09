@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "372903171071",
+    "project_id": "alraqi-app",
+    "storage_bucket": "alraqi-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:372903171071:android:bfb2b53d0c5e2b5e9f0dca",
+        "android_client_info": {
+          "package_name": "com.example.doc_approval"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAt2SmaTxAiB5OmXKm5EsXCcCZOfTg33Uk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
