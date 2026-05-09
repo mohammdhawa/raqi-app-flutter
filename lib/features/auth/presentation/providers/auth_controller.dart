@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/api_client.dart';
 import '../../data/auth_repository.dart';
 import '../../domain/user.dart';
+import '../../../../core/services/push_notification_service.dart';
+
 
 /// Three possible auth states.
 sealed class AuthState {
@@ -25,7 +27,7 @@ class AuthUnauthenticated extends AuthState {
 /// Holds the current session. The router watches this to decide between
 /// /login and /home.
 class AuthController extends StateNotifier<AuthState> {
-  AuthController(this._repo, this._unauthenticatedSignal)
+  AuthController(this._repo, this._unauthenticatedSignal, this._pushService)
     : super(const AuthInitial()) {
     _unauthenticatedSignal.addListener(_onForcedLogout);
     _bootstrap();
@@ -33,6 +35,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   final AuthRepository _repo;
   final UnauthenticatedSignal _unauthenticatedSignal;
+  final PushNotificationService _pushService;
 
   Future<void> _bootstrap() async {
     final user = await _repo.restoreSession();
@@ -44,9 +47,14 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> login(String email, String password) async {
     final result = await _repo.login(email: email, password: password);
     state = AuthAuthenticated(result.user);
+    // Register FCM token after login
+    await _pushService.registerToken();
+    _pushService.listenForTokenRefresh();
   }
 
   Future<void> logout() async {
+    // Remove FCM token before logout
+    await _pushService.removeToken();
     await _repo.logout();
     state = const AuthUnauthenticated();
   }
@@ -68,6 +76,7 @@ final authControllerProvider =
       return AuthController(
         ref.watch(authRepositoryProvider),
         ref.watch(unauthenticatedSignalProvider),
+        ref.watch(pushNotificationServiceProvider),  // add this
       );
     });
 

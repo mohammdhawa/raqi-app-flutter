@@ -12,6 +12,10 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  # Push Notifications
+  firebase_core: ^3.0.0
+  firebase_messaging: ^15.0.0
+  flutter_local_notifications: ^17.0.0
 
   # State management
   flutter_riverpod: ^2.5.1
