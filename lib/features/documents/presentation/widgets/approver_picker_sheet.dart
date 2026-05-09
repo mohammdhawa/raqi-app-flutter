@@ -53,7 +53,8 @@ class _ApproverPickerSheetState
           .searchPotentialApprovers(search: _searchController.text.trim());
       if (!mounted) return;
       setState(() {
-        _results = results;
+        // Hide the Chief — they are auto-added by the backend.
+        _results = results.where((u) => !u.isChief).toList();
         _isLoading = false;
       });
     } on ApiFailure catch (e) {

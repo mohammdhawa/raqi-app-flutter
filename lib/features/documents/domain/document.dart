@@ -57,6 +57,7 @@ class WorkflowStep {
     required this.userId,
     required this.order,
     required this.status,
+    required this.role,
     required this.user,
     this.signedAt,
     this.note,
@@ -66,15 +67,20 @@ class WorkflowStep {
   final int userId;
   final int order;
   final WorkflowStepStatus status;
+  /// `"manager"` or `"chief"` — determines UI treatment of this step.
+  final String role;
   final User user;
   final DateTime? signedAt;
   final String? note;
+
+  bool get isChief => role == 'chief';
 
   factory WorkflowStep.fromJson(Map<String, dynamic> json) => WorkflowStep(
     id: json['id'] as int,
     userId: json['user_id'] as int,
     order: (json['order'] as num?)?.toInt() ?? 0,
     status: WorkflowStepStatus.fromString(json['status'] as String?),
+    role: (json['role'] as String?) ?? 'manager',
     user: json['user'] != null
         ? User.fromJson(json['user'] as Map<String, dynamic>)
         : User.empty(),
@@ -128,6 +134,7 @@ class Document {
     this.fileName,
     this.fileMime,
     this.fileSize,
+    this.stampedFilePath,
     this.nextPendingUsers = const [],
   });
 
@@ -138,6 +145,9 @@ class Document {
   final String? fileName;
   final String? fileMime;
   final int? fileSize;
+  /// Populated incrementally after each approve/reject action.
+  /// Non-null even while status is still `pending`.
+  final String? stampedFilePath;
   final DocumentStatus status;
   final WorkflowMode workflowMode;
   final DateTime createdAt;
@@ -173,6 +183,7 @@ class Document {
       fileName: json['file_name'] as String?,
       fileMime: json['file_mime'] as String?,
       fileSize: json['file_size'] as int?,
+      stampedFilePath: json['stamped_file_path'] as String?,
       status: DocumentStatus.fromString(json['status'] as String?),
       workflowMode: WorkflowMode.fromString(json['workflow_mode'] as String?),
       createdAt: _parseDate(json['created_at']) ?? DateTime.now(),
@@ -199,6 +210,7 @@ class Document {
     fileName: fileName,
     fileMime: fileMime,
     fileSize: fileSize,
+    stampedFilePath: stampedFilePath,
     status: status,
     workflowMode: workflowMode,
     createdAt: createdAt,

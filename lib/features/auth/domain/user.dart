@@ -13,11 +13,12 @@ class User {
   final int id;
   final String name;
   final String? email;
-  final String? role; // 'admin' or 'manager'
+  final String? role; // 'admin', 'manager', or 'chief'
   final int? departmentId;
   final int? sectionId;
 
   bool get isAdmin => role == 'admin';
+  bool get isChief => role == 'chief';
 
   factory User.empty() => const User(
     id: 0,

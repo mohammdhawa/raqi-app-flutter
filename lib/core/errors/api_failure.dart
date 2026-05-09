@@ -41,6 +41,8 @@ enum ApiErrorCode {
   documentAlreadyFinalized,
   validationFailed,
   invalidWorkflow,
+  chiefCannotActYet,
+  chiefAlreadyExists,
   serverError,
   network, // client-side: no internet / timeout
   unknown;
@@ -65,6 +67,10 @@ enum ApiErrorCode {
         return ApiErrorCode.validationFailed;
       case 'invalid_workflow':
         return ApiErrorCode.invalidWorkflow;
+      case 'chief_cannot_act_yet':
+        return ApiErrorCode.chiefCannotActYet;
+      case 'chief_already_exists':
+        return ApiErrorCode.chiefAlreadyExists;
       case 'server_error':
         return ApiErrorCode.serverError;
       default:
@@ -95,6 +101,10 @@ String arabicMessageFor(ApiErrorCode code, {String? fallback}) {
       return fallback ?? 'الرجاء التأكد من صحة البيانات.';
     case ApiErrorCode.invalidWorkflow:
       return 'إعداد سير الموافقة غير صحيح.';
+    case ApiErrorCode.chiefCannotActYet:
+      return 'لا يمكن للمسؤول الأعلى اتخاذ إجراء قبل انتهاء جميع المدراء من قراراتهم.';
+    case ApiErrorCode.chiefAlreadyExists:
+      return 'يوجد مسؤول أعلى بالفعل. مسموح بواحد فقط.';
     case ApiErrorCode.serverError:
       return 'خطأ في الخادم. حاول مرة أخرى.';
     case ApiErrorCode.network:

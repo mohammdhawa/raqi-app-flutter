@@ -215,6 +215,10 @@ class _DetailsBody extends StatelessWidget {
           _Header(document: doc),
           const SizedBox(height: 16),
           _FilePreviewCard(document: doc),
+          if (doc.stampedFilePath != null) ...[
+            const SizedBox(height: 12),
+            _StampedPdfButton(document: doc),
+          ],
           const SizedBox(height: 16),
           _SectionTitle(
             icon: doc.workflowMode == WorkflowMode.sequential
@@ -697,6 +701,96 @@ class _PdfPreviewDialog extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
+// Stamped PDF download
+// ---------------------------------------------------------------------------
+
+class _StampedPdfButton extends ConsumerWidget {
+  const _StampedPdfButton({required this.document});
+  final Document document;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isPending = document.status == DocumentStatus.pending;
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () async {
+          final storage = ref.read(tokenStorageProvider);
+          final token = await storage.read();
+          if (!context.mounted) return;
+          final url =
+              '${AppConstants.storageBase}/api/documents/${document.id}/stamped-pdf';
+          await showDialog<void>(
+            context: context,
+            barrierColor: Colors.black87,
+            builder: (_) => _PdfPreviewDialog(
+              url: url,
+              fileName: isPending
+                  ? '${document.title} (قيد المراجعة).pdf'
+                  : '${document.title} (معتمد).pdf',
+              token: token,
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.verified_outlined,
+                  color: AppColors.primary,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'النسخة المختومة',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isPending ? 'قيد المراجعة — نسخة مؤقتة' : 'النسخة النهائية المعتمدة',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.visibility_outlined,
+                color: AppColors.primary,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Section title
 // ---------------------------------------------------------------------------
 
@@ -765,45 +859,86 @@ class _ParallelStepRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        CircleAvatar(
-          radius: 20,
-          backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-          child: Text(
-            _initials(step.user.name),
-            style: const TextStyle(
-              color: AppColors.primary,
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
+    return Container(
+      padding: step.isChief ? const EdgeInsets.all(10) : EdgeInsets.zero,
+      decoration: step.isChief
+          ? BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.primary, width: 1.5),
+            )
+          : null,
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: step.isChief ? 22 : 20,
+            backgroundColor: step.isChief
+                ? AppColors.primary
+                : AppColors.primary.withValues(alpha: 0.1),
+            child: step.isChief
+                ? const Icon(Icons.shield_outlined, color: AppColors.white, size: 20)
+                : Text(
+                    _initials(step.user.name),
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    ),
+                  ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        step.user.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    if (step.isChief) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'المسؤول الأعلى',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  step.user.email ?? '',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                step.user.name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                step.user.email ?? '',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ),
-        StatusChip.fromStep(stepStatus: step.status, dense: true),
-      ],
+          StatusChip.fromStep(stepStatus: step.status, dense: true),
+        ],
+      ),
     );
   }
 
