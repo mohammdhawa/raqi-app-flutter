@@ -39,6 +39,7 @@ class PushNotificationService {
 
   /// Register FCM token with the backend (call after login)
   Future<void> registerToken() async {
+    await FirebaseMessaging.instance.deleteToken();
     final token = await FirebaseMessaging.instance.getToken();
     if (token == null) return;
     debugPrint('FCM token: $token');
