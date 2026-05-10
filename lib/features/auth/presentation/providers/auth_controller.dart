@@ -39,9 +39,14 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> _bootstrap() async {
     final user = await _repo.restoreSession();
-    state = user != null
-        ? AuthAuthenticated(user)
-        : const AuthUnauthenticated();
+    if (user != null) {
+      state = AuthAuthenticated(user);
+      // Re-register FCM token on session restore (token may have rotated)
+      await _pushService.registerToken();
+      _pushService.listenForTokenRefresh();
+    } else {
+      state = const AuthUnauthenticated();
+    }
   }
 
   Future<void> login(String email, String password) async {

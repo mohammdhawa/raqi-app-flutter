@@ -47,6 +47,9 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp> {
     final pushService = ref.read(pushNotificationServiceProvider);
     await pushService.init();
 
+    // ✅ ADD THIS — keeps token fresh automatically
+    pushService.listenForTokenRefresh();
+
     // Foreground: show a local banner
     FirebaseMessaging.onMessage.listen((message) {
       pushService.showLocalNotification(message);
