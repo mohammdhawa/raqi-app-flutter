@@ -16,6 +16,7 @@ dependencies:
   firebase_core: ^3.0.0
   firebase_messaging: ^15.0.0
   flutter_local_notifications: ^17.0.0
+  share_plus: ^10.1.4
 
   # State management
   flutter_riverpod: ^2.5.1
@@ -58,4 +59,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/logo-full-trans.png
+    - assets/logo-symbol-gold.png
   # Cairo is loaded via google_fonts package — no font assets needed.

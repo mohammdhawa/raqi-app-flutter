@@ -8,12 +8,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/theme/app_theme.dart';
+import 'features/splash/splash_screen.dart'; // ← NEW
 
 /// Top-level background handler (must be a top-level function)
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  // No need to show notification — FCM handles it automatically in background
 }
 
 void main() async {
@@ -47,7 +47,6 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp> {
     final pushService = ref.read(pushNotificationServiceProvider);
     await pushService.init();
 
-    // ✅ ADD THIS — keeps token fresh automatically
     pushService.listenForTokenRefresh();
 
     // Foreground: show a local banner

@@ -90,15 +90,11 @@ class _DocumentDetailsScreenState
   int get documentId => widget.documentId;
 
   // ── Approve / Reject ─────────────────────────────────────────────────────
-  // Defined as State methods (not build-scope closures) so they aren't
-  // recreated on every rebuild and don't capture stale ref/context.
 
   Future<void> _approve(String? note) async {
     final controller = ref.read(documentDetailsProvider(documentId).notifier);
     final updated = await controller.approve(note: note);
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     if (updated != null) {
       _propagateToLists(updated);
       _scheduleSnack('تم اعتماد المستند.');
@@ -110,9 +106,7 @@ class _DocumentDetailsScreenState
   Future<void> _reject(String? note) async {
     final controller = ref.read(documentDetailsProvider(documentId).notifier);
     final updated = await controller.reject(note: note);
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     if (updated != null) {
       _propagateToLists(updated);
       _scheduleSnack('تم رفض المستند.');
@@ -164,8 +158,78 @@ class _DocumentDetailsScreenState
     final controller =
         ref.read(documentDetailsProvider(documentId).notifier);
 
-    final scaffold = Scaffold(
-      appBar: AppBar(title: const Text('تفاصيل المستند')),
+    final doc = state.document;
+    final statusLabel = doc != null ? _statusLabel(doc.status) : '';
+
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      appBar: AppBar(
+        backgroundColor: AppColors.primary,
+        elevation: 0,
+        centerTitle: true,
+        leading: Padding(
+          padding: const EdgeInsets.all(10),
+          child: GestureDetector(
+            onTap: () => Navigator.maybePop(context),
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.chevron_right,
+                color: AppColors.textOnDark,
+                size: 22,
+              ),
+            ),
+          ),
+        ),
+        title: Column(
+          children: [
+            const Text(
+              'تفاصيل المستند',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textOnDark,
+              ),
+            ),
+            if (doc != null)
+              Text(
+                'DOC-${doc.id} · $statusLabel',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.white.withValues(alpha: 0.78),
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: GestureDetector(
+              onTap: () {
+                // Share action placeholder
+              },
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.share_outlined,
+                  color: AppColors.textOnDark,
+                  size: 20,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: _DetailsBody(
         state: state,
         onRefresh: controller.load,
@@ -178,14 +242,20 @@ class _DocumentDetailsScreenState
         onReject: _reject,
       ),
     );
-    return scaffold;
+  }
+
+  String _statusLabel(DocumentStatus status) {
+    return switch (status) {
+      DocumentStatus.pending => 'قيد الانتظار',
+      DocumentStatus.approved => 'معتمد',
+      DocumentStatus.rejected => 'مرفوض',
+      _ => '',
+    };
   }
 }
 
 // ---------------------------------------------------------------------------
-// Body — extracted so loading/error/data branches each return the SAME root
-// widget type (so element identity is preserved across rebuilds where
-// possible).
+// Body
 // ---------------------------------------------------------------------------
 
 class _DetailsBody extends StatelessWidget {
@@ -217,26 +287,12 @@ class _DetailsBody extends StatelessWidget {
           _FilePreviewCard(document: doc),
           if (doc.stampedFilePath != null) ...[
             const SizedBox(height: 12),
-            _StampedPdfButton(document: doc),
+            _StampedPdfCard(document: doc),
           ],
           const SizedBox(height: 16),
-          _SectionTitle(
-            icon: doc.workflowMode == WorkflowMode.sequential
-                ? Icons.format_list_numbered
-                : Icons.groups_outlined,
-            title: doc.workflowMode == WorkflowMode.sequential
-                ? 'سير الموافقة (تسلسلي)'
-                : 'المعتمدون (متوازي)',
-          ),
-          const SizedBox(height: 12),
-          _WorkflowSection(document: doc),
+          _WorkflowCard(document: doc),
           const SizedBox(height: 16),
-          const _SectionTitle(
-            icon: Icons.history,
-            title: 'سجل النشاط',
-          ),
-          const SizedBox(height: 12),
-          _LogsSection(logs: doc.logs),
+          _LogsCard(logs: doc.logs),
           const SizedBox(height: 24),
         ],
       ),
@@ -245,7 +301,7 @@ class _DetailsBody extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Header
+// Header card
 // ---------------------------------------------------------------------------
 
 class _Header extends StatelessWidget {
@@ -254,76 +310,139 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final modeLabel = document.workflowMode == WorkflowMode.sequential
+        ? 'اعتماد تسلسلي'
+        : 'اعتماد متوازي';
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [AppColors.primary, Color(0xFF2D507F)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          colors: [AppColors.primary, AppColors.primaryGrad],
+          begin: Alignment(-0.7, -0.4),
+          end: Alignment(0.9, 0.6),
         ),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  document.title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.white,
-                  ),
+          // Decorative radial glow bottom-right
+          Positioned(
+            bottom: -30,
+            right: -30,
+            child: Container(
+              width: 160,
+              height: 160,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFFC8A36B).withValues(alpha: 0.25),
+                    Colors.transparent,
+                  ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              StatusChip(status: document.status),
-            ],
-          ),
-          if (document.description != null &&
-              document.description!.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              document.description!,
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.white.withValues(alpha: 0.9),
-                height: 1.5,
               ),
             ),
-          ],
-          const SizedBox(height: 12),
-          Row(
+          ),
+          // Decorative ring top-left
+          Positioned(
+            top: -20,
+            left: -20,
+            child: Container(
+              width: 90,
+              height: 90,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: const Color(0xFFC8A36B).withValues(alpha: 0.35),
+                  width: 1,
+                ),
+              ),
+            ),
+          ),
+          // Content
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                Icons.person_outline,
-                size: 14,
-                color: AppColors.white.withValues(alpha: 0.9),
+              // Top row: code + mode + status
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'DOC-${document.id}  $modeLabel',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.white.withValues(alpha: 0.70),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                  StatusChip(status: document.status),
+                ],
               ),
-              const SizedBox(width: 4),
+              const SizedBox(height: 10),
+              // Title
               Text(
-                document.creator.name,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.white.withValues(alpha: 0.9),
+                document.title,
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textOnDark,
+                  height: 1.4,
                 ),
               ),
-              const SizedBox(width: 12),
-              Icon(
-                Icons.schedule,
-                size: 14,
-                color: AppColors.white.withValues(alpha: 0.9),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                DateFormat('yyyy/MM/dd · HH:mm').format(document.createdAt),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.white.withValues(alpha: 0.9),
+              // Description
+              if (document.description != null &&
+                  document.description!.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  document.description!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withValues(alpha: 0.90),
+                    height: 1.7,
+                  ),
                 ),
+              ],
+              // Divider
+              const SizedBox(height: 10),
+              Container(
+                height: 1,
+                color: Colors.white.withValues(alpha: 0.15),
+              ),
+              const SizedBox(height: 10),
+              // Meta row
+              Row(
+                children: [
+                  Icon(
+                    Icons.person_outline,
+                    size: 14,
+                    color: Colors.white.withValues(alpha: 0.90),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    document.creator.name,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.white.withValues(alpha: 0.90),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Icon(
+                    Icons.access_time,
+                    size: 14,
+                    color: Colors.white.withValues(alpha: 0.90),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    DateFormat('yyyy/MM/dd · HH:mm').format(document.createdAt),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.white.withValues(alpha: 0.90),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -333,9 +452,6 @@ class _Header extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// File preview
-// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // File preview card
 // ---------------------------------------------------------------------------
@@ -355,7 +471,6 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
     return '${AppConstants.storageBase}/storage/$path';
   }
 
-  // Detect type from mime first, then fall back to extension
   bool get _isPdf {
     final mime = widget.document.fileMime ?? '';
     if (mime.isNotEmpty) return mime == 'application/pdf';
@@ -374,7 +489,6 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
     if (url == null) return;
 
     if (_isPdf) {
-      // Get auth token for PDF viewer
       final storage = ref.read(tokenStorageProvider);
       final token = await storage.read();
       if (!mounted) return;
@@ -383,8 +497,7 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
         barrierColor: Colors.black87,
         builder: (_) => _PdfPreviewDialog(
           url: url,
-          fileName: widget.document.fileName ??
-              url.split('/').last,
+          fileName: widget.document.fileName ?? url.split('/').last,
           token: token,
         ),
       );
@@ -394,15 +507,14 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
         barrierColor: Colors.black87,
         builder: (_) => _ImagePreviewDialog(
           url: url,
-          fileName: widget.document.fileName ??
-              url.split('/').last,
+          fileName: widget.document.fileName ?? url.split('/').last,
         ),
       );
     } else {
-      // Unsupported type
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('معاينة هذا النوع من الملفات غير مدعومة.')),
+          const SnackBar(
+              content: Text('معاينة هذا النوع من الملفات غير مدعومة.')),
         );
       }
     }
@@ -414,53 +526,64 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
     final url = _fileUrl;
 
     return Container(
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
         children: [
-          // Tappable thumbnail for images
+          // Image thumbnail
           if (_isImage && url != null)
             GestureDetector(
               onTap: _openPreview,
               child: ClipRRect(
                 borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(14),
+                  top: Radius.circular(15),
                 ),
                 child: AspectRatio(
                   aspectRatio: 16 / 10,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      CachedNetworkImage(
-                        imageUrl: url,
-                        fit: BoxFit.cover,
-                        placeholder: (_, __) => Container(
-                          color: AppColors.background,
-                          child: const Center(
-                              child: CircularProgressIndicator()),
-                        ),
-                        errorWidget: (_, __, ___) => Container(
-                          color: AppColors.background,
-                          child: const Icon(
-                            Icons.broken_image_outlined,
-                            size: 48,
-                            color: AppColors.textSecondary,
+                      Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment(-0.6, -0.6),
+                            end: Alignment(0.8, 0.8),
+                            colors: [
+                              Color(0xFFF4EFE3),
+                              Color(0xFFE7DDC5),
+                              Color(0xFFD7C7A1),
+                            ],
                           ),
                         ),
                       ),
-                      // Zoom hint overlay
+                      CachedNetworkImage(
+                        imageUrl: url,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => const SizedBox.shrink(),
+                        errorWidget: (_, __, ___) => const Center(
+                          child: Icon(
+                            Icons.broken_image_outlined,
+                            size: 48,
+                            color: AppColors.text3,
+                          ),
+                        ),
+                      ),
+                      // Preview badge bottom-left
                       Positioned(
-                        bottom: 8,
-                        right: 8,
+                        bottom: 10,
+                        left: 10,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
+                              horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(8),
+                            color: const Color(0xFF0D1828)
+                                .withValues(alpha: 0.75),
+                            borderRadius:
+                                BorderRadius.circular(AppColors.pill),
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
@@ -480,27 +603,42 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
                 ),
               ),
             ),
+          // Footer row
           Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(12),
             child: Row(
               children: [
+                // File type icon
                 Container(
-                  width: 44,
-                  height: 44,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.08),
+                    color: _isPdf
+                        ? AppColors.rejectedBg
+                        : AppColors.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(
-                    _isPdf
-                        ? Icons.picture_as_pdf_outlined
-                        : _isImage
-                            ? Icons.image_outlined
-                            : Icons.insert_drive_file_outlined,
-                    color: AppColors.primary,
-                  ),
+                  alignment: Alignment.center,
+                  child: _isPdf
+                      ? const Text(
+                          'PDF',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.rejected,
+                            letterSpacing: 0.5,
+                          ),
+                        )
+                      : Icon(
+                          _isImage
+                              ? Icons.image_outlined
+                              : Icons.insert_drive_file_outlined,
+                          color: AppColors.primary,
+                          size: 20,
+                        ),
                 ),
                 const SizedBox(width: 12),
+                // File info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -511,27 +649,36 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
-                          fontSize: 14,
+                          fontSize: 13,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        _formatSize(doc.fileSize),
+                        _formatMeta(doc),
                         style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
+                          fontSize: 11,
+                          color: AppColors.text2,
                         ),
                       ),
                     ],
                   ),
                 ),
+                // Eye button
                 if (url != null)
-                  IconButton(
-                    tooltip: 'معاينة الملف',
-                    onPressed: _openPreview,
-                    icon: const Icon(
-                      Icons.visibility_outlined,
-                      color: AppColors.primary,
+                  GestureDetector(
+                    onTap: _openPreview,
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.visibility_outlined,
+                        color: AppColors.text2,
+                        size: 18,
+                      ),
                     ),
                   ),
               ],
@@ -540,6 +687,10 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
         ],
       ),
     );
+  }
+
+  String _formatMeta(Document doc) {
+    return _formatSize(doc.fileSize);
   }
 
   String _formatSize(int? bytes) {
@@ -553,7 +704,7 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
 }
 
 // ---------------------------------------------------------------------------
-// Image preview — full-screen, pinch-to-zoom, tap background to dismiss
+// Image preview
 // ---------------------------------------------------------------------------
 
 class _ImagePreviewDialog extends StatelessWidget {
@@ -567,12 +718,10 @@ class _ImagePreviewDialog extends StatelessWidget {
       backgroundColor: Colors.transparent,
       child: Stack(
         children: [
-          // Tap outside image to dismiss
           GestureDetector(
             onTap: () => Navigator.pop(context),
             child: Container(color: Colors.black87),
           ),
-          // Pinch-to-zoom image
           Center(
             child: InteractiveViewer(
               minScale: 0.5,
@@ -590,7 +739,6 @@ class _ImagePreviewDialog extends StatelessWidget {
               ),
             ),
           ),
-          // Top bar
           SafeArea(
             child: Padding(
               padding:
@@ -628,7 +776,7 @@ class _ImagePreviewDialog extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// PDF preview — full-screen SfPdfViewer with auth header
+// PDF preview
 // ---------------------------------------------------------------------------
 
 class _PdfPreviewDialog extends StatelessWidget {
@@ -654,7 +802,6 @@ class _PdfPreviewDialog extends StatelessWidget {
       child: SafeArea(
         child: Column(
           children: [
-            // Top bar
             Container(
               color: Colors.black87,
               padding:
@@ -684,7 +831,6 @@ class _PdfPreviewDialog extends StatelessWidget {
                 ],
               ),
             ),
-            // PDF viewer
             Expanded(
               child: SfPdfViewer.network(
                 url,
@@ -701,89 +847,103 @@ class _PdfPreviewDialog extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Stamped PDF download
+// Stamped PDF card
 // ---------------------------------------------------------------------------
 
-class _StampedPdfButton extends ConsumerWidget {
-  const _StampedPdfButton({required this.document});
+class _StampedPdfCard extends ConsumerWidget {
+  const _StampedPdfCard({required this.document});
   final Document document;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isPending = document.status == DocumentStatus.pending;
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () async {
-          final storage = ref.read(tokenStorageProvider);
-          final token = await storage.read();
-          if (!context.mounted) return;
-          final url =
-              '${AppConstants.storageBase}/api/documents/${document.id}/stamped-pdf';
-          await showDialog<void>(
-            context: context,
-            barrierColor: Colors.black87,
-            builder: (_) => _PdfPreviewDialog(
-              url: url,
-              fileName: isPending
-                  ? '${document.title} (قيد المراجعة).pdf'
-                  : '${document.title} (معتمد).pdf',
-              token: token,
-            ),
-          );
-        },
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+    final isFinal = document.status == DocumentStatus.approved;
+
+    return GestureDetector(
+      onTap: () async {
+        final storage = ref.read(tokenStorageProvider);
+        final token = await storage.read();
+        if (!context.mounted) return;
+        final url =
+            '${AppConstants.storageBase}/api/documents/${document.id}/stamped-pdf';
+        await showDialog<void>(
+          context: context,
+          barrierColor: Colors.black87,
+          builder: (_) => _PdfPreviewDialog(
+            url: url,
+            fileName: isFinal
+                ? '${document.title} (معتمد).pdf'
+                : '${document.title} (قيد المراجعة).pdf',
+            token: token,
           ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.verified_outlined,
-                  color: AppColors.primary,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'النسخة المختومة',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      isPending ? 'قيد المراجعة — نسخة مؤقتة' : 'النسخة النهائية المعتمدة',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.visibility_outlined,
-                color: AppColors.primary,
-              ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.accent, width: 1.5),
+          gradient: LinearGradient(
+            colors: [
+              AppColors.accent.withValues(alpha: 0.05),
+              AppColors.accent.withValues(alpha: 0.02),
             ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
           ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.verified,
+                color: AppColors.accent,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'النسخة المختومة',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    isFinal ? 'النسخة النهائية المعتمدة' : 'قيد المراجعة — نسخة مؤقتة',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.text2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.bg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.accent),
+              ),
+              child: const Icon(
+                Icons.visibility_outlined,
+                color: AppColors.accent,
+                size: 18,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -791,11 +951,52 @@ class _StampedPdfButton extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Section title
+// Workflow card
 // ---------------------------------------------------------------------------
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.icon, required this.title});
+class _WorkflowCard extends StatelessWidget {
+  const _WorkflowCard({required this.document});
+  final Document document;
+
+  @override
+  Widget build(BuildContext context) {
+    final isSequential = document.workflowMode == WorkflowMode.sequential;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionHeader(
+            icon: isSequential
+                ? Icons.format_list_numbered
+                : Icons.group_outlined,
+            title: isSequential
+                ? 'سير الاعتماد التسلسلي'
+                : 'سير الاعتماد المتوازي',
+          ),
+          const SizedBox(height: 14),
+          WorkflowStepper(
+            steps: document.workflows,
+            isSequential: isSequential,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Section header
+// ---------------------------------------------------------------------------
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.icon, required this.title});
   final IconData icon;
   final String title;
 
@@ -808,9 +1009,9 @@ class _SectionTitle extends StatelessWidget {
         Text(
           title,
           style: const TextStyle(
-            fontSize: 15,
+            fontSize: 14,
             fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
+            color: AppColors.text,
           ),
         ),
       ],
@@ -819,180 +1020,97 @@ class _SectionTitle extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Workflow (sequential = stepper, parallel = list)
+// Logs card
 // ---------------------------------------------------------------------------
 
-class _WorkflowSection extends StatelessWidget {
-  const _WorkflowSection({required this.document});
-  final Document document;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: document.workflowMode == WorkflowMode.sequential
-          ? WorkflowStepper(steps: document.workflows)
-          : Column(
-              children: [
-                for (var i = 0; i < document.workflows.length; i++) ...[
-                  _ParallelStepRow(
-                    key: ValueKey(document.workflows[i].id),
-                    step: document.workflows[i],
-                  ),
-                  if (i < document.workflows.length - 1)
-                    const Divider(height: 16),
-                ],
-              ],
-            ),
-    );
-  }
-}
-
-class _ParallelStepRow extends StatelessWidget {
-  const _ParallelStepRow({super.key, required this.step});
-  final WorkflowStep step;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: step.isChief ? const EdgeInsets.all(10) : EdgeInsets.zero,
-      decoration: step.isChief
-          ? BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.primary, width: 1.5),
-            )
-          : null,
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: step.isChief ? 22 : 20,
-            backgroundColor: step.isChief
-                ? AppColors.primary
-                : AppColors.primary.withValues(alpha: 0.1),
-            child: step.isChief
-                ? const Icon(Icons.shield_outlined, color: AppColors.white, size: 20)
-                : Text(
-                    _initials(step.user.name),
-                    style: const TextStyle(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13,
-                    ),
-                  ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        step.user.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    if (step.isChief) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'المسؤول الأعلى',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  step.user.email ?? '',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          StatusChip.fromStep(stepStatus: step.status, dense: true),
-        ],
-      ),
-    );
-  }
-
-  String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts.first.characters.first;
-    return '${parts.first.characters.first}${parts[1].characters.first}';
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Logs
-// ---------------------------------------------------------------------------
-
-class _LogsSection extends StatelessWidget {
-  const _LogsSection({required this.logs});
+class _LogsCard extends StatelessWidget {
+  const _LogsCard({required this.logs});
   final List<DocumentLog> logs;
 
   @override
   Widget build(BuildContext context) {
-    if (logs.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: const Center(
-          child: Text(
-            'لا توجد سجلات بعد.',
-            style: TextStyle(color: AppColors.textSecondary),
-          ),
-        ),
-      );
-    }
-    final sorted = [...logs]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
       ),
-      // Use a Column instead of a nested ListView.separated to avoid
-      // nested-scrollable interactions with the parent ListView.
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (var i = 0; i < sorted.length; i++) ...[
-            _LogTile(key: ValueKey(sorted[i].id), log: sorted[i]),
-            if (i < sorted.length - 1) const Divider(height: 1),
-          ],
+          const _SectionHeader(
+            icon: Icons.history,
+            title: 'سجل النشاط',
+          ),
+          const SizedBox(height: 14),
+          if (logs.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: Center(
+                child: Text(
+                  'لا توجد سجلات بعد.',
+                  style: TextStyle(color: AppColors.text2),
+                ),
+              ),
+            )
+          else
+            _LogsList(logs: logs),
         ],
       ),
+    );
+  }
+}
+
+class _LogsList extends StatelessWidget {
+  const _LogsList({required this.logs});
+  final List<DocumentLog> logs;
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...logs]
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return Column(
+      children: [
+        for (var i = 0; i < sorted.length; i++) ...[
+          _LogTile(key: ValueKey(sorted[i].id), log: sorted[i]),
+          if (i < sorted.length - 1)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  const dashWidth = 4.0;
+                  const dashSpace = 3.0;
+                  final count =
+                      (constraints.maxWidth / (dashWidth + dashSpace)).floor();
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(count, (_) {
+                      return SizedBox(
+                        width: dashWidth + dashSpace,
+                        height: 1,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(
+                                color: AppColors.border,
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.only(right: dashSpace),
+                          ),
+                        ),
+                      );
+                    }),
+                  );
+                },
+              ),
+            ),
+        ],
+      ],
     );
   }
 }
@@ -1003,36 +1121,53 @@ class _LogTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (icon, color, label) = switch (log.action) {
+    final (icon, bgColor, fgColor, label) = switch (log.action) {
       LogAction.created => (
         Icons.note_add_outlined,
+        AppColors.primary.withValues(alpha: 0.10),
         AppColors.primary,
         'تم إنشاء المستند',
       ),
       LogAction.sent => (
         Icons.send_outlined,
-        AppColors.accent,
+        AppColors.accent.withValues(alpha: 0.12),
+        AppColors.pendingText,
         'تم إرسال المستند للاعتماد',
       ),
       LogAction.approved => (
         Icons.check_circle_outline,
-        AppColors.statusApproved,
+        AppColors.approvedBg,
+        AppColors.approved,
         'اعتمد المستند',
       ),
       LogAction.rejected => (
         Icons.cancel_outlined,
-        AppColors.statusRejected,
+        AppColors.rejectedBg,
+        AppColors.rejected,
         'رفض المستند',
       ),
-      _ => (Icons.info_outline, AppColors.textSecondary, 'حدث'),
+      _ => (
+        Icons.info_outline,
+        AppColors.primary.withValues(alpha: 0.10),
+        AppColors.text2,
+        'حدث',
+      ),
     };
 
     return Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 22),
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: bgColor,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: fgColor, size: 16),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -1043,7 +1178,7 @@ class _LogTile extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: AppColors.text,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -1051,21 +1186,32 @@ class _LogTile extends StatelessWidget {
                   DateFormat('yyyy/MM/dd · HH:mm').format(log.createdAt),
                   style: const TextStyle(
                     fontSize: 11,
-                    color: AppColors.textSecondary,
+                    color: AppColors.text3,
                   ),
                 ),
                 if (log.note != null && log.note!.isNotEmpty) ...[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
-                      color: AppColors.background,
+                      color: AppColors.surface,
                       borderRadius: BorderRadius.circular(8),
+                      border: Border(
+                        right: BorderSide(
+                          color: AppColors.accent,
+                          width: 2,
+                        ),
+                      ),
                     ),
                     child: Text(
                       log.note!,
-                      style: const TextStyle(fontSize: 12),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.text2,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                   ),
                 ],
@@ -1079,11 +1225,7 @@ class _LogTile extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Action bar — ALWAYS returns the same widget shape across all states.
-// We toggle visibility via Visibility(maintainState/maintainSize). This is
-// the most defensive shape: the bottomNavigationBar slot always contains
-// the same SafeArea > Container > Row > [Buttons] tree, regardless of
-// whether it's the user's turn or whether an action is in flight.
+// Action bar
 // ---------------------------------------------------------------------------
 
 class _ActionBar extends StatefulWidget {
@@ -1106,76 +1248,92 @@ class _ActionBar extends StatefulWidget {
 }
 
 class _ActionBarState extends State<_ActionBar> {
-
   @override
   Widget build(BuildContext context) {
     final canAct = widget.document != null &&
         widget.document!.isTurnOf(widget.currentUser);
 
-    final result = Visibility(
+    return Visibility(
       visible: canAct,
       maintainState: true,
       maintainAnimation: true,
       maintainSize: false,
       child: SafeArea(
         child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: const BoxDecoration(
-            color: AppColors.surface,
+            color: AppColors.bg,
             border: Border(top: BorderSide(color: AppColors.border)),
+            boxShadow: AppColors.shActionBar,
           ),
           child: Row(
             children: [
+              // Reject button
               Expanded(
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.statusRejected,
-                    side: const BorderSide(
-                      color: AppColors.statusRejected,
-                      width: 1.4,
+                child: SizedBox(
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.rejected,
+                      side: const BorderSide(
+                        color: AppColors.rejected,
+                        width: 1.5,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppColors.rMd),
+                      ),
                     ),
+                    onPressed: widget.isActing
+                        ? null
+                        : () => _promptForNote(
+                              context,
+                              title: 'تأكيد الرفض',
+                              confirmLabel: 'رفض',
+                              confirmColor: AppColors.rejected,
+                              isNoteRequired: true,
+                              onConfirm: widget.onReject,
+                            ),
+                    icon: const Icon(Icons.close, size: 18),
+                    label: const Text('رفض'),
                   ),
-                  onPressed: widget.isActing
-                      ? null
-                      : () => _promptForNote(
-                            context,
-                            title: 'رفض المستند',
-                            confirmLabel: 'رفض',
-                            confirmColor: AppColors.statusRejected,
-                            isNoteRequired: true,
-                            onConfirm: widget.onReject,
-                          ),
-                  icon: const Icon(Icons.close),
-                  label: const Text('رفض'),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
+              // Approve button
               Expanded(
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.statusApproved,
+                child: SizedBox(
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.approved,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppColors.rMd),
+                      ),
+                      elevation: 0,
+                    ),
+                    onPressed: widget.isActing
+                        ? null
+                        : () => _promptForNote(
+                              context,
+                              title: 'تأكيد الاعتماد',
+                              confirmLabel: 'اعتماد',
+                              confirmColor: AppColors.approved,
+                              isNoteRequired: false,
+                              onConfirm: widget.onApprove,
+                            ),
+                    icon: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: widget.isActing
+                          ? const CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.textOnDark,
+                            )
+                          : const Icon(Icons.check, size: 18),
+                    ),
+                    label: const Text('اعتماد'),
                   ),
-                  onPressed: widget.isActing
-                      ? null
-                      : () => _promptForNote(
-                            context,
-                            title: 'اعتماد المستند',
-                            confirmLabel: 'اعتماد',
-                            confirmColor: AppColors.statusApproved,
-                            isNoteRequired: false,
-                            onConfirm: widget.onApprove,
-                          ),
-                  icon: SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: widget.isActing
-                        ? const CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.white,
-                          )
-                        : const Icon(Icons.check, size: 18),
-                  ),
-                  label: const Text('اعتماد'),
                 ),
               ),
             ],
@@ -1183,7 +1341,6 @@ class _ActionBarState extends State<_ActionBar> {
         ),
       ),
     );
-    return result;
   }
 
   Future<void> _promptForNote(
@@ -1194,20 +1351,6 @@ class _ActionBarState extends State<_ActionBar> {
     required bool isNoteRequired,
     required Future<void> Function(String? note) onConfirm,
   }) async {
-    // FIX (root cause of '_dependents.isEmpty'):
-    // Previously the TextEditingController was created in this method's
-    // scope and disposed immediately after `await showDialog`. Disposing
-    // a TextEditingController synchronously after the dialog returns
-    // races against Flutter's overlay-deactivation pass — the EditableText
-    // for the dialog's TextField is still being deactivated and still
-    // depends on the controller. That deactivation walk is exactly what
-    // the stack trace showed (frames #21..#90 of _deactivateRecursively
-    // through the Overlay's children).
-    //
-    // Fix: move the controller into a StatefulWidget that lives INSIDE
-    // the dialog tree. Its dispose() is now called by Flutter as part
-    // of the same deactivation pass that's tearing down the dialog —
-    // strictly in the right order, no race.
     final note = await showDialog<String?>(
       context: context,
       builder: (ctx) => _NotePromptDialog(
@@ -1223,12 +1366,10 @@ class _ActionBarState extends State<_ActionBar> {
   }
 }
 
-/// Dialog body extracted into its own StatefulWidget so the
-/// TextEditingController is owned by the dialog's element tree and
-/// disposed as part of the dialog's normal deactivation pass — NOT
-/// from the calling code immediately after `await showDialog`, which
-/// races with the overlay tearing down the dialog and triggers
-/// '_dependents.isEmpty' on the EditableText's InheritedWidgets.
+// ---------------------------------------------------------------------------
+// Note prompt dialog
+// ---------------------------------------------------------------------------
+
 class _NotePromptDialog extends StatefulWidget {
   const _NotePromptDialog({
     required this.title,
@@ -1248,54 +1389,102 @@ class _NotePromptDialog extends StatefulWidget {
 
 class _NotePromptDialogState extends State<_NotePromptDialog> {
   final _controller = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
+  bool _hasText = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() {
+      final now = _controller.text.trim().isNotEmpty;
+      if (now != _hasText) setState(() => _hasText = now);
+    });
+  }
 
   @override
   void dispose() {
-    // Runs as part of the dialog's deactivation pass, AFTER Flutter has
-    // unregistered the EditableText's dependents. No race.
     _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final canConfirm = !widget.isNoteRequired || _hasText;
+
     return AlertDialog(
-      title: Text(widget.title),
-      content: Form(
-        key: _formKey,
-        child: TextFormField(
-          controller: _controller,
-          maxLines: 3,
-          decoration: InputDecoration(
-            labelText:
-                widget.isNoteRequired ? 'سبب الرفض' : 'ملاحظة (اختياري)',
-            alignLabelWithHint: true,
-          ),
-          validator: (value) {
-            if (widget.isNoteRequired &&
-                (value == null || value.trim().isEmpty)) {
-              return 'الرجاء إدخال سبب الرفض';
-            }
-            return null;
-          },
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      contentPadding: const EdgeInsets.all(20),
+      titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      title: Text(
+        widget.title,
+        style: const TextStyle(
+          fontSize: 17,
+          fontWeight: FontWeight.w700,
+          color: AppColors.text,
         ),
       ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _controller,
+            maxLines: 3,
+            decoration: InputDecoration(
+              hintText: widget.isNoteRequired
+                  ? 'سبب الرفض — مطلوب'
+                  : 'أضف ملاحظة (اختياري)',
+              hintStyle: const TextStyle(
+                color: AppColors.text3,
+                fontSize: 13,
+              ),
+              filled: true,
+              fillColor: AppColors.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppColors.rMd),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppColors.rMd),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppColors.rMd),
+                borderSide:
+                    const BorderSide(color: AppColors.primary, width: 1.5),
+              ),
+              contentPadding: const EdgeInsets.all(14),
+            ),
+          ),
+        ],
+      ),
       actions: [
-        TextButton(
+        // Cancel
+        OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.text2,
+            side: const BorderSide(color: AppColors.border),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppColors.rSm),
+            ),
+          ),
           onPressed: () => Navigator.pop(context, null),
           child: const Text('إلغاء'),
         ),
-        TextButton(
-          onPressed: () {
-            if (_formKey.currentState!.validate()) {
-              Navigator.pop(context, _controller.text.trim());
-            }
-          },
-          child: Text(
-            widget.confirmLabel,
-            style: TextStyle(color: widget.confirmColor),
+        // Confirm
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: widget.confirmColor,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppColors.rSm),
+            ),
+            elevation: 0,
           ),
+          onPressed: canConfirm
+              ? () => Navigator.pop(context, _controller.text.trim())
+              : null,
+          child: Text(widget.confirmLabel),
         ),
       ],
     );

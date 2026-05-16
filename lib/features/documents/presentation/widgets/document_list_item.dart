@@ -6,9 +6,17 @@ import '../../../auth/domain/user.dart';
 import '../../domain/document.dart';
 import '../../../../shared/widgets/status_chip.dart';
 
-/// Single row in the inbox/sent list.
-class DocumentListItem extends StatelessWidget {
-  const DocumentListItem({
+/// Card widget for each document in the inbox / sent list.
+///
+/// Layout:
+///   ┌──────────────────────────────────┬───┐
+///   │  StatusChip        DOC-2419      │ ▌ │  ← accent bar (status color)
+///   │  Title of document …             │ ▌ │
+///   │  👤 Creator  ·  🕐 Date          │ ▌ │
+///   │                          ‹       │ ▌ │  ← chevron
+///   └──────────────────────────────────┴───┘
+class AlraqiDocCard extends StatelessWidget {
+  const AlraqiDocCard({
     super.key,
     required this.document,
     required this.currentUser,
@@ -19,159 +27,163 @@ class DocumentListItem extends StatelessWidget {
   final User? currentUser;
   final VoidCallback onTap;
 
+  Color get _statusColor => switch (document.status) {
+        DocumentStatus.pending => AppColors.pending,
+        DocumentStatus.approved => AppColors.approved,
+        DocumentStatus.rejected => AppColors.rejected,
+      };
+
   @override
   Widget build(BuildContext context) {
-    final isMyTurn = document.isTurnOf(currentUser);
     return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(14),
+      color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isMyTurn ? AppColors.accent : AppColors.border,
-              width: isMyTurn ? 1.4 : 1,
-            ),
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border, width: 1),
           ),
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _FileIcon(mime: document.fileMime),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          document.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
+              // ── Main content ───────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                child: Row(
+                  children: [
+                    // Content column
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Top: StatusChip + doc code
+                          Row(
+                            children: [
+                              StatusChip(status: document.status, dense: true),
+                              const Spacer(),
+                              Text(
+                                'DOC-${document.id}',
+                                style: const TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 10,
+                                  color: AppColors.text3,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'بواسطة: ${document.creator.name}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
+                          const SizedBox(height: 6),
+
+                          // Title
+                          Text(
+                            document.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.text,
+                            ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 8),
+
+                          // Meta row: creator + date
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.person_outline,
+                                size: 13,
+                                color: AppColors.text2,
+                              ),
+                              const SizedBox(width: 3),
+                              Flexible(
+                                child: Text(
+                                  document.creator.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.text2,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              const Icon(
+                                Icons.access_time,
+                                size: 13,
+                                color: AppColors.text2,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                _formatDate(document.createdAt),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.text2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  StatusChip(status: document.status, dense: true),
-                ],
+
+                    const SizedBox(width: 8),
+
+                    // Chevron — points left (→ inward in RTL)
+                    const Icon(
+                      Icons.chevron_left,
+                      size: 20,
+                      color: AppColors.text3,
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.schedule,
-                    size: 14,
-                    color: AppColors.textSecondary,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    DateFormat('yyyy/MM/dd · HH:mm').format(document.createdAt),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const Spacer(),
-                  Icon(
-                    document.workflowMode == WorkflowMode.sequential
-                        ? Icons.format_list_numbered
-                        : Icons.groups_outlined,
-                    size: 14,
-                    color: AppColors.textSecondary,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    document.workflowMode == WorkflowMode.sequential
-                        ? 'تسلسلي'
-                        : 'متوازي',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              if (isMyTurn) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
+
+              // ── Accent bar on RIGHT edge ───────────────────────────
+              Positioned(
+                top: 0,
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  width: 3,
                   decoration: BoxDecoration(
-                    color: AppColors.accent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.bolt,
-                        size: 14,
-                        color: AppColors.accent,
-                      ),
-                      SizedBox(width: 4),
-                      Text(
-                        'دورك للاعتماد',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.accent,
-                        ),
-                      ),
-                    ],
+                    color: _statusColor,
+                    borderRadius: const BorderRadius.only(
+                      topRight: Radius.circular(12),
+                      bottomRight: Radius.circular(12),
+                    ),
                   ),
                 ),
-              ],
+              ),
             ],
           ),
         ),
       ),
     );
   }
-}
 
-class _FileIcon extends StatelessWidget {
-  const _FileIcon({this.mime});
-  final String? mime;
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
 
-  @override
-  Widget build(BuildContext context) {
-    final icon = switch (mime) {
-      String m when m.startsWith('image/') => Icons.image_outlined,
-      'application/pdf' => Icons.picture_as_pdf_outlined,
-      String m when m.contains('word') => Icons.description_outlined,
-      _ => Icons.insert_drive_file_outlined,
-    };
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Icon(icon, color: AppColors.primary, size: 22),
-    );
+    if (diff.inMinutes < 60) {
+      return 'منذ ${diff.inMinutes} دقيقة';
+    }
+    if (diff.inHours < 24) {
+      return 'منذ ${diff.inHours} ساعات';
+    }
+    if (diff.inDays < 7) {
+      return 'منذ ${diff.inDays} أيام';
+    }
+    return DateFormat('yyyy/MM/dd').format(date);
   }
 }
+
+/// Kept as a type alias so existing imports continue to compile.
+typedef DocumentListItem = AlraqiDocCard;

@@ -3,6 +3,26 @@ import 'package:flutter/material.dart';
 import '../../core/errors/api_failure.dart';
 import '../../core/theme/app_colors.dart';
 
+/// Centered loading indicator — 32 dp navy spinner, stroke 3.
+class AlraqiLoading extends StatelessWidget {
+  const AlraqiLoading({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: SizedBox(
+        width: 32,
+        height: 32,
+        child: CircularProgressIndicator(
+          color: AppColors.primary,
+          strokeWidth: 3,
+        ),
+      ),
+    );
+  }
+}
+
+/// Empty state with icon card, title, subtitle, and a decorative gold rule.
 class EmptyStateView extends StatelessWidget {
   const EmptyStateView({
     super.key,
@@ -25,36 +45,48 @@ class EmptyStateView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // 88×88 rounded-24 surface card with icon
             Container(
               width: 88,
               height: 88,
               decoration: BoxDecoration(
-                color: AppColors.accentSoft.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(24),
               ),
-              child: Icon(icon, size: 44, color: AppColors.accent),
+              child: Icon(icon, size: 40, color: AppColors.text3),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
             Text(
               title,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: 18,
+                fontSize: 17,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+                color: AppColors.text,
               ),
             ),
             if (subtitle != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                subtitle!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textSecondary,
+              const SizedBox(height: 6),
+              SizedBox(
+                width: 240,
+                child: Text(
+                  subtitle!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.text2,
+                  ),
                 ),
               ),
             ],
+            const SizedBox(height: 20),
+            // Decorative gold rule
+            Container(
+              width: 40,
+              height: 2,
+              color: AppColors.accent,
+            ),
             if (action != null) ...[
               const SizedBox(height: 20),
               action!,
@@ -80,28 +112,36 @@ class ErrorStateView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // 88×88 rounded-24 surface card with error icon
             Container(
               width: 88,
               height: 88,
-              decoration: const BoxDecoration(
-                color: AppColors.statusRejectedBg,
-                shape: BoxShape.circle,
+              decoration: BoxDecoration(
+                color: AppColors.rejectedBg,
+                borderRadius: BorderRadius.circular(24),
               ),
               child: const Icon(
                 Icons.error_outline,
-                size: 44,
-                color: AppColors.statusRejected,
+                size: 40,
+                color: AppColors.rejected,
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
             Text(
               arabicMessageFor(failure.code, fallback: failure.message),
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: AppColors.text,
               ),
+            ),
+            const SizedBox(height: 6),
+            // Decorative gold rule
+            Container(
+              width: 40,
+              height: 2,
+              color: AppColors.accent,
             ),
             if (onRetry != null) ...[
               const SizedBox(height: 20),
