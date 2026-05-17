@@ -222,22 +222,25 @@ class _AppBarSection extends StatelessWidget {
 
                       const Spacer(),
 
-                      // Leading (right in RTL): logo
-                      Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Center(
-                          child: Image.asset(
-                            'assets/logo-symbol-gold.png',
-                            width: 26,
-                            errorBuilder: (_, __, ___) => const Icon(
-                              Icons.assured_workload_outlined,
-                              color: AppColors.accent,
-                              size: 22,
+                      // Leading (right in RTL): logo → tap to open About
+                      GestureDetector(
+                        onTap: () => context.push('/about'),
+                        child: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Center(
+                            child: Image.asset(
+                              'assets/logo-symbol-gold.png',
+                              width: 26,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                Icons.assured_workload_outlined,
+                                color: AppColors.accent,
+                                size: 22,
+                              ),
                             ),
                           ),
                         ),
