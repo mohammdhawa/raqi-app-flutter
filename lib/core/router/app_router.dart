@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/about/about_screen.dart';
 import '../../features/auth/presentation/providers/auth_controller.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/documents/presentation/screens/create_document_screen.dart';
@@ -59,6 +60,10 @@ final routerProvider = Provider<GoRouter>((ref) {
               }
               return DocumentDetailsScreen(documentId: id);
             },
+          ),
+          GoRoute(
+            path: 'about',
+            builder: (_, __) => const AboutScreen(),
           ),
         ],
       ),
