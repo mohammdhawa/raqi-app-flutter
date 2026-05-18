@@ -153,7 +153,7 @@ class DocumentsListController extends StateNotifier<DocumentsListState> {
 }
 
 /// Family of controllers — one per list type (inbox / sent).
-final documentsListProvider = StateNotifierProvider.family<
+final documentsListProvider = StateNotifierProvider.autoDispose.family<
     DocumentsListController,
     DocumentsListState,
     DocumentListType>((ref, type) {
