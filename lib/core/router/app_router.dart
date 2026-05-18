@@ -8,6 +8,7 @@ import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/documents/presentation/screens/create_document_screen.dart';
 import '../../features/documents/presentation/screens/document_details_screen.dart';
 import '../../features/documents/presentation/screens/documents_home_screen.dart';
+import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../features/splash/splash_screen.dart';
 
 /// App router. Uses a small [Listenable] adapter so go_router rebuilds when
@@ -60,6 +61,10 @@ final routerProvider = Provider<GoRouter>((ref) {
               }
               return DocumentDetailsScreen(documentId: id);
             },
+          ),
+          GoRoute(
+            path: 'notifications',
+            builder: (_, __) => const NotificationsScreen(),
           ),
           GoRoute(
             path: 'about',
