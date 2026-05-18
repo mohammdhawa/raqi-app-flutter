@@ -293,8 +293,7 @@ class _NotificationHeaderBtn extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final asyncCount = ref.watch(unreadCountProvider);
-    final count = asyncCount.valueOrNull ?? 0;
+    final count = ref.watch(unreadCountProvider);
 
     return GestureDetector(
       onTap: () => context.push('/notifications'),

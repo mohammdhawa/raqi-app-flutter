@@ -139,25 +139,22 @@ class NotificationsListController
     }
   }
 
-  /// Mark every notification as read.
+  /// Mark every notification as read — optimistic local update,
+  /// then fire the API call.
   Future<void> markAllAsRead() async {
-    state = state.copyWith(isMarkingAllRead: true);
+    // Optimistically mark all items in local state FIRST.
+    final updated =
+        state.notifications.map((n) => n.markAsRead()).toList();
+    state = state.copyWith(
+      notifications: updated,
+      isMarkingAllRead: false,
+    );
+
     try {
       await _repo.markAllAsRead();
-      if (!mounted) return;
-      // Optimistically mark all items.
-      final updated =
-          state.notifications.map((n) => n.markAsRead()).toList();
-      state = state.copyWith(
-        notifications: updated,
-        isMarkingAllRead: false,
-      );
-    } on Exception catch (e) {
-      if (!mounted) return;
-      state = state.copyWith(
-        isMarkingAllRead: false,
-        error: e is ApiFailure ? e : null,
-      );
+    } on Exception {
+      // Silently fail — items are already marked locally. A refresh
+      // will re-sync from the server.
     }
   }
 }
@@ -171,10 +168,10 @@ final notificationsListProvider = StateNotifierProvider.autoDispose<
 
 // ─── Unread-count provider ───────────────────────────────────────────
 
-/// A lightweight provider that fetches only the unread count (for the
-/// badge on the bell icon in the main AppBar). Auto-disposes so it
-/// re-fetches each time the home screen rebuilds.
-final unreadCountProvider = FutureProvider.autoDispose<int>((ref) {
-  final repo = ref.watch(notificationsRepositoryProvider);
-  return repo.unreadCount();
+/// Derives the unread count directly from the notifications list state.
+/// This means the bell badge updates instantly when markAsRead or
+/// markAllAsRead updates the local state — no extra API call needed.
+final unreadCountProvider = Provider.autoDispose<int>((ref) {
+  final state = ref.watch(notificationsListProvider);
+  return state.unreadCount;
 });
