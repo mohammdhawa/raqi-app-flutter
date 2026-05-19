@@ -3,6 +3,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 import '../../../../core/errors/api_failure.dart';
@@ -206,29 +209,6 @@ class _DocumentDetailsScreenState
               ),
           ],
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: GestureDetector(
-              onTap: () {
-                // Share action placeholder
-              },
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.share_outlined,
-                  color: AppColors.textOnDark,
-                  size: 20,
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
       body: _DetailsBody(
         state: state,
@@ -681,6 +661,12 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
                       ),
                     ),
                   ),
+                if (url != null)
+                  _FileActionButtons(
+                    url: url,
+                    fileName: doc.fileName ?? url.split('/').last,
+                    requiresAuth: true,
+                  ),
               ],
             ),
           ),
@@ -857,22 +843,23 @@ class _StampedPdfCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isFinal = document.status == DocumentStatus.approved;
+    final url =
+        '${AppConstants.storageBase}/api/documents/${document.id}/stamped-pdf';
+    final fileName = isFinal
+        ? '${document.title} (معتمد).pdf'
+        : '${document.title} (قيد المراجعة).pdf';
 
     return GestureDetector(
       onTap: () async {
         final storage = ref.read(tokenStorageProvider);
         final token = await storage.read();
         if (!context.mounted) return;
-        final url =
-            '${AppConstants.storageBase}/api/documents/${document.id}/stamped-pdf';
         await showDialog<void>(
           context: context,
           barrierColor: Colors.black87,
           builder: (_) => _PdfPreviewDialog(
             url: url,
-            fileName: isFinal
-                ? '${document.title} (معتمد).pdf'
-                : '${document.title} (قيد المراجعة).pdf',
+            fileName: fileName,
             token: token,
           ),
         );
@@ -929,19 +916,41 @@ class _StampedPdfCard extends ConsumerWidget {
                 ],
               ),
             ),
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppColors.bg,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.accent),
+            GestureDetector(
+              onTap: () async {
+                final storage = ref.read(tokenStorageProvider);
+                final token = await storage.read();
+                if (!context.mounted) return;
+                await showDialog<void>(
+                  context: context,
+                  barrierColor: Colors.black87,
+                  builder: (_) => _PdfPreviewDialog(
+                    url: url,
+                    fileName: fileName,
+                    token: token,
+                  ),
+                );
+              },
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.bg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.accent),
+                ),
+                child: const Icon(
+                  Icons.visibility_outlined,
+                  color: AppColors.accent,
+                  size: 18,
+                ),
               ),
-              child: const Icon(
-                Icons.visibility_outlined,
-                color: AppColors.accent,
-                size: 18,
-              ),
+            ),
+            _FileActionButtons(
+              url: url,
+              fileName: fileName,
+              requiresAuth: true,
+              accentColor: AppColors.accent,
             ),
           ],
         ),
@@ -1220,6 +1229,143 @@ class _LogTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// File action buttons (download + share)
+// ---------------------------------------------------------------------------
+
+class _FileActionButtons extends ConsumerStatefulWidget {
+  const _FileActionButtons({
+    required this.url,
+    required this.fileName,
+    this.requiresAuth = false,
+    this.accentColor,
+  });
+
+  final String url;
+  final String fileName;
+  final bool requiresAuth;
+  final Color? accentColor;
+
+  @override
+  ConsumerState<_FileActionButtons> createState() => _FileActionButtonsState();
+}
+
+class _FileActionButtonsState extends ConsumerState<_FileActionButtons> {
+  bool _isDownloading = false;
+  bool _isSharing = false;
+
+  bool get _busy => _isDownloading || _isSharing;
+
+  Future<String?> _fetchToTemp() async {
+    String? token;
+    if (widget.requiresAuth) {
+      token = await ref.read(tokenStorageProvider).read();
+    }
+    try {
+      final dir = await getTemporaryDirectory();
+      final filePath = '${dir.path}/${widget.fileName}';
+      await Dio().download(
+        widget.url,
+        filePath,
+        options: Options(
+          headers: {
+            if (token != null && token.isNotEmpty)
+              'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+      return filePath;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _showError() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('فشل التنزيل. حاول مرة أخرى.')),
+    );
+  }
+
+  Future<void> _onDownload() async {
+    if (_busy) return;
+    setState(() => _isDownloading = true);
+    final path = await _fetchToTemp();
+    if (!mounted) return;
+    setState(() => _isDownloading = false);
+    if (path != null) {
+      OpenFilex.open(path);
+    } else {
+      _showError();
+    }
+  }
+
+  Future<void> _onShare() async {
+    if (_busy) return;
+    setState(() => _isSharing = true);
+    final path = await _fetchToTemp();
+    if (!mounted) return;
+    setState(() => _isSharing = false);
+    if (path != null) {
+      await Share.shareXFiles([XFile(path)]);
+    } else {
+      _showError();
+    }
+  }
+
+  Widget _btn({
+    required IconData icon,
+    required VoidCallback? onTap,
+    bool loading = false,
+  }) {
+    final color = widget.accentColor ?? AppColors.text2;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: widget.accentColor != null
+              ? Border.all(color: widget.accentColor!)
+              : null,
+        ),
+        child: loading
+            ? Padding(
+                padding: const EdgeInsets.all(10),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: color,
+                ),
+              )
+            : Icon(icon, color: color, size: 18),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(width: 6),
+        _btn(
+          icon: Icons.download_outlined,
+          onTap: _busy ? null : _onDownload,
+          loading: _isDownloading,
+        ),
+        const SizedBox(width: 6),
+        _btn(
+          icon: Icons.share_outlined,
+          onTap: _busy ? null : _onShare,
+          loading: _isSharing,
+        ),
+      ],
     );
   }
 }
