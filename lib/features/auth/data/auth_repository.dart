@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -30,7 +31,12 @@ class AuthRepository {
   }) async {
     final response = await _api.dio.post<Map<String, dynamic>>(
       '/login',
-      data: {'email': email, 'password': password},
+      data: {
+        'email': email,
+        'password': password,
+        'platform': 'mobile',
+        'device_name': 'Flutter ${Platform.operatingSystem}',
+      },
     );
     final data = response.data!;
     final token = data['token'] as String;
@@ -42,10 +48,13 @@ class AuthRepository {
     return AuthResult(user: user, token: token);
   }
 
-  Future<void> logout() async {
+  Future<void> logout({bool logoutFromAll = false}) async {
     // Best-effort: hit the backend, but always clear local state.
     try {
-      await _api.dio.post('/logout');
+      await _api.dio.post(
+        '/logout',
+        data: logoutFromAll ? {'logout_from_all': true} : null,
+      );
     } catch (_) {
       // Ignore — token might already be invalid; we still clear locally.
     }
