@@ -17,6 +17,7 @@ import '../../../../shared/widgets/status_chip.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../data/documents_repository.dart';
 import '../../domain/document.dart';
+import '../providers/document_comments_controller.dart';
 import '../providers/document_details_controller.dart';
 import '../providers/documents_list_controller.dart';
 import '../widgets/workflow_stepper.dart';
@@ -212,6 +213,7 @@ class _DocumentDetailsScreenState
       ),
       body: _DetailsBody(
         state: state,
+        documentId: documentId,
         onRefresh: controller.load,
       ),
       bottomNavigationBar: _ActionBar(
@@ -239,9 +241,14 @@ class _DocumentDetailsScreenState
 // ---------------------------------------------------------------------------
 
 class _DetailsBody extends StatelessWidget {
-  const _DetailsBody({required this.state, required this.onRefresh});
+  const _DetailsBody({
+    required this.state,
+    required this.documentId,
+    required this.onRefresh,
+  });
 
   final DocumentDetailsState state;
+  final int documentId;
   final Future<void> Function() onRefresh;
 
   @override
@@ -273,6 +280,8 @@ class _DetailsBody extends StatelessWidget {
           _WorkflowCard(document: doc),
           const SizedBox(height: 16),
           _LogsCard(logs: doc.logs),
+          const SizedBox(height: 16),
+          _CommentsCard(documentId: documentId),
           const SizedBox(height: 24),
         ],
       ),
@@ -1696,6 +1705,341 @@ class _NotePromptDialogState extends State<_NotePromptDialog> {
           child: Text(widget.confirmLabel),
         ),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Comments card
+// ---------------------------------------------------------------------------
+
+class _CommentsCard extends ConsumerStatefulWidget {
+  const _CommentsCard({required this.documentId});
+  final int documentId;
+
+  @override
+  ConsumerState<_CommentsCard> createState() => _CommentsCardState();
+}
+
+class _CommentsCardState extends ConsumerState<_CommentsCard> {
+  final _textController = TextEditingController();
+  String _visibility = 'all';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref
+          .read(documentCommentsProvider(widget.documentId).notifier)
+          .load();
+    });
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final text = _textController.text.trim();
+    if (text.isEmpty) return;
+    final result = await ref
+        .read(documentCommentsProvider(widget.documentId).notifier)
+        .addComment(comment: text, visibility: _visibility);
+    if (!mounted) return;
+    if (result != null) {
+      _textController.clear();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('حدث خطأ أثناء إرسال التعليق.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(documentCommentsProvider(widget.documentId));
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionHeader(
+            icon: Icons.chat_bubble_outline,
+            title: 'التعليقات',
+          ),
+          const SizedBox(height: 14),
+          // List
+          if (state.isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (state.comments.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: Text(
+                  'لا توجد تعليقات بعد.',
+                  style: TextStyle(color: AppColors.text2),
+                ),
+              ),
+            )
+          else
+            ...state.comments.map((c) => _CommentTile(comment: c)),
+          const Divider(color: AppColors.border, height: 24),
+          // Visibility selector
+          Row(
+            children: [
+              const Text(
+                'الظهور:',
+                style: TextStyle(fontSize: 12, color: AppColors.text2),
+              ),
+              const SizedBox(width: 8),
+              _VisibilityDropdown(
+                value: _visibility,
+                onChanged: (v) => setState(() => _visibility = v),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Input row
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _textController,
+                  maxLines: 4,
+                  minLines: 1,
+                  enabled: !state.isPosting,
+                  decoration: InputDecoration(
+                    hintText: 'أضف تعليقاً...',
+                    hintStyle: const TextStyle(
+                      color: AppColors.text3,
+                      fontSize: 13,
+                    ),
+                    filled: true,
+                    fillColor: AppColors.surface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppColors.rMd),
+                      borderSide: const BorderSide(color: AppColors.border),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppColors.rMd),
+                      borderSide: const BorderSide(color: AppColors.border),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppColors.rMd),
+                      borderSide: const BorderSide(
+                          color: AppColors.primary, width: 1.5),
+                    ),
+                    contentPadding: const EdgeInsets.all(12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 44,
+                height: 44,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppColors.rMd),
+                    ),
+                    padding: EdgeInsets.zero,
+                    elevation: 0,
+                  ),
+                  onPressed: state.isPosting ? null : _submit,
+                  child: state.isPosting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.send, size: 18),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Comment tile
+// ---------------------------------------------------------------------------
+
+class _CommentTile extends StatelessWidget {
+  const _CommentTile({required this.comment});
+  final DocumentComment comment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+            child: Text(
+              _initials(comment.user.name),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        comment.user.name,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.text,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      _relativeTime(comment.createdAt),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.text3,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  comment.comment,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.text2,
+                    height: 1.5,
+                  ),
+                ),
+                if (comment.visibility == 'approvers') ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentSoft,
+                      borderRadius: BorderRadius.circular(AppColors.pill),
+                    ),
+                    child: const Text(
+                      'للمعتمدين فقط',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.pendingText,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    final buf = StringBuffer();
+    for (final p in parts.take(2)) {
+      if (p.isNotEmpty) buf.write(p[0]);
+    }
+    final s = buf.toString();
+    return s.isEmpty ? '؟' : s;
+  }
+
+  String _relativeTime(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inSeconds < 60) return 'منذ لحظات';
+    if (diff.inMinutes < 60) {
+      final m = diff.inMinutes;
+      return 'منذ $m ${m == 1 ? "دقيقة" : "دقائق"}';
+    }
+    if (diff.inHours < 24) {
+      final h = diff.inHours;
+      return 'منذ $h ${h == 1 ? "ساعة" : "ساعات"}';
+    }
+    if (diff.inDays < 30) {
+      final d = diff.inDays;
+      return 'منذ $d ${d == 1 ? "يوم" : "أيام"}';
+    }
+    return DateFormat('yyyy/MM/dd').format(dt);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Visibility dropdown
+// ---------------------------------------------------------------------------
+
+class _VisibilityDropdown extends StatelessWidget {
+  const _VisibilityDropdown({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppColors.rSm),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isDense: true,
+          style: const TextStyle(
+            fontSize: 12,
+            color: AppColors.text,
+            fontFamily: 'Cairo',
+          ),
+          items: const [
+            DropdownMenuItem(value: 'all', child: Text('الكل')),
+            DropdownMenuItem(
+                value: 'approvers', child: Text('المعتمدون فقط')),
+          ],
+          onChanged: (v) {
+            if (v != null) onChanged(v);
+          },
+        ),
+      ),
     );
   }
 }

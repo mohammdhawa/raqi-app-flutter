@@ -297,6 +297,32 @@ class DocumentsPage {
   }
 }
 
+/// A comment posted on a document.
+class DocumentComment {
+  const DocumentComment({
+    required this.id,
+    required this.comment,
+    required this.visibility,
+    required this.createdAt,
+    required this.user,
+  });
+
+  final int id;
+  final String comment;
+  final String visibility; // "all" | "approvers"
+  final DateTime createdAt;
+  final User user;
+
+  factory DocumentComment.fromJson(Map<String, dynamic> json) =>
+      DocumentComment(
+        id: json['id'] as int,
+        comment: json['comment'] as String,
+        visibility: (json['visibility'] as String?) ?? 'all',
+        createdAt: _parseDate(json['created_at']) ?? DateTime.now(),
+        user: User.fromJson(json['user'] as Map<String, dynamic>),
+      );
+}
+
 DateTime? _parseDate(dynamic raw) {
   if (raw == null) return null;
   return DateTime.tryParse(raw.toString())?.toLocal();

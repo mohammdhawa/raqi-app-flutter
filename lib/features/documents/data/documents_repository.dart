@@ -182,6 +182,30 @@ class DocumentsRepository {
     return _parseDocumentEnvelope(response.data!);
   }
 
+  /// `GET /documents/{id}/comments`
+  Future<List<DocumentComment>> getComments(int documentId) async {
+    final response = await _api.dio.get<Map<String, dynamic>>(
+      '/documents/$documentId/comments',
+    );
+    final data = (response.data!['data'] as List?) ?? [];
+    return data
+        .map((e) => DocumentComment.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// `POST /documents/{id}/comments`
+  Future<DocumentComment> addComment(
+    int documentId, {
+    required String comment,
+    String visibility = 'all',
+  }) async {
+    final response = await _api.dio.post<Map<String, dynamic>>(
+      '/documents/$documentId/comments',
+      data: {'comment': comment, 'visibility': visibility},
+    );
+    return DocumentComment.fromJson(response.data!);
+  }
+
   /// `POST /documents/{id}/reject`
   Future<Document> reject(int id, {String? note}) async {
     final response = await _api.dio.post<Map<String, dynamic>>(
