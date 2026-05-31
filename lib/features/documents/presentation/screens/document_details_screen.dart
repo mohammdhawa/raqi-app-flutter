@@ -201,7 +201,7 @@ class _DocumentDetailsScreenState
             ),
             if (doc != null)
               Text(
-                'DOC-${doc.id} · $statusLabel',
+                '${doc.documentNumber ?? "DOC-${doc.id}"} · $statusLabel',
                 style: TextStyle(
                   fontSize: 11,
                   color: Colors.white.withValues(alpha: 0.78),
@@ -349,7 +349,7 @@ class _Header extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      'DOC-${document.id}  $modeLabel',
+                      '${document.documentNumber ?? "DOC-${document.id}"}  $modeLabel',
                       style: TextStyle(
                         fontSize: 11,
                         color: Colors.white.withValues(alpha: 0.70),
@@ -424,6 +424,34 @@ class _Header extends StatelessWidget {
                   ),
                 ],
               ),
+              // Origin badge — shown for generated documents
+              if (document.isGenerated) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(AppColors.pill),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.auto_awesome_outlined,
+                          size: 12, color: AppColors.accent),
+                      const SizedBox(width: 5),
+                      Text(
+                        'إنشاء من قالب: ${document.templateName ?? "غير معروف"}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.accent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ],

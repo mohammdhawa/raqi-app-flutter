@@ -1,0 +1,1431 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart' hide TextDirection;
+
+import '../../../../core/errors/api_failure.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../auth/domain/user.dart';
+import '../../data/documents_repository.dart';
+import '../../domain/document.dart';
+import '../../domain/document_template.dart';
+import '../providers/documents_list_controller.dart';
+import '../widgets/approver_picker_sheet.dart';
+
+// ═══════════════════════════════════════════════════════════════════════
+//  GENERATED DOCUMENT FORM SCREEN
+// ═══════════════════════════════════════════════════════════════════════
+
+class GeneratedDocumentFormScreen extends ConsumerStatefulWidget {
+  const GeneratedDocumentFormScreen({super.key, required this.template});
+
+  final DocumentTemplate template;
+
+  @override
+  ConsumerState<GeneratedDocumentFormScreen> createState() =>
+      _GeneratedDocumentFormScreenState();
+}
+
+class _GeneratedDocumentFormScreenState
+    extends ConsumerState<GeneratedDocumentFormScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  WorkflowMode _mode = WorkflowMode.sequential;
+  List<User> _approvers = [];
+  bool _isSubmitting = false;
+  String? _formError;
+
+  /// Dynamic field controllers — keyed by field key from schema.
+  final Map<String, TextEditingController> _fieldControllers = {};
+
+  /// Select field values.
+  final Map<String, String?> _selectValues = {};
+
+  /// Table field values — list of rows, each row is a list of cell values.
+  final Map<String, List<List<String>>> _tableValues = {};
+
+  DocumentTemplate get template => widget.template;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-populate title with template name.
+    _titleController.text = template.name;
+
+    // Initialise controllers for each field in the schema.
+    for (final field in template.fieldsSchema) {
+      final key = field['key'] as String;
+      final type = field['type'] as String;
+      if (type == 'table') {
+        _tableValues[key] = [];
+      } else if (type == 'select') {
+        _selectValues[key] = null;
+      } else {
+        _fieldControllers[key] = TextEditingController();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    for (final c in _fieldControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  // ── Collect field values ────────────────────────────────────────────
+
+  Map<String, dynamic> _collectFieldValues() {
+    final values = <String, dynamic>{};
+    for (final field in template.fieldsSchema) {
+      final key = field['key'] as String;
+      final type = field['type'] as String;
+      if (type == 'table') {
+        values[key] = _tableValues[key] ?? [];
+      } else if (type == 'select') {
+        values[key] = _selectValues[key];
+      } else {
+        values[key] = _fieldControllers[key]?.text.trim();
+      }
+    }
+    return values;
+  }
+
+  // ── Build field widget ─────────────────────────────────────────────
+
+  Widget _buildField(Map<String, dynamic> field) {
+    final key = field['key'] as String;
+    final type = field['type'] as String;
+    final required = field['required'] == true;
+
+    switch (type) {
+      case 'text':
+        return _StyledTextField(
+          controller: _fieldControllers[key]!,
+          hintText: field['label'] as String? ?? '',
+          validator: required
+              ? (v) =>
+                  (v == null || v.trim().isEmpty) ? 'هذا الحقل مطلوب' : null
+              : null,
+        );
+
+      case 'number':
+        return _StyledTextField(
+          controller: _fieldControllers[key]!,
+          hintText: field['label'] as String? ?? '',
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+          validator: required
+              ? (v) =>
+                  (v == null || v.trim().isEmpty) ? 'هذا الحقل مطلوب' : null
+              : null,
+        );
+
+      case 'textarea':
+        return _StyledTextField(
+          controller: _fieldControllers[key]!,
+          hintText: field['label'] as String? ?? '',
+          multiline: true,
+          minLines: 3,
+          validator: required
+              ? (v) =>
+                  (v == null || v.trim().isEmpty) ? 'هذا الحقل مطلوب' : null
+              : null,
+        );
+
+      case 'date':
+        return _DatePickerField(
+          controller: _fieldControllers[key]!,
+          required: required,
+        );
+
+      case 'select':
+        final options = ((field['options'] as List?) ?? [])
+            .map((e) => e.toString())
+            .toList();
+        return _SelectField(
+          value: _selectValues[key],
+          options: options,
+          required: required,
+          onChanged: (v) => setState(() => _selectValues[key] = v),
+        );
+
+      case 'table':
+        final columns = ((field['columns'] as List?) ?? [])
+            .map((e) => e.toString())
+            .toList();
+        return _TableField(
+          columns: columns,
+          rows: _tableValues[key] ?? [],
+          required: required,
+          label: field['label'] as String? ?? '',
+          onChanged: (rows) => setState(() => _tableValues[key] = rows),
+        );
+
+      default:
+        return _StyledTextField(
+          controller: _fieldControllers[key] ??= TextEditingController(),
+          hintText: field['label'] as String? ?? '',
+        );
+    }
+  }
+
+  // ── Approver picker ────────────────────────────────────────────────
+
+  Future<void> _pickApprovers() async {
+    try {
+      final result = await showModalBottomSheet<List<User>>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (sheetContext) {
+          return FractionallySizedBox(
+            heightFactor: 0.85,
+            child: ApproverPickerSheet(initialSelection: _approvers),
+          );
+        },
+      );
+      if (result != null) {
+        setState(() => _approvers = result);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _formError = 'تعذّر فتح نافذة اختيار المعتمدين: $e';
+      });
+    }
+  }
+
+  void _reorderApprovers(int oldIndex, int newIndex) {
+    setState(() {
+      if (newIndex > oldIndex) newIndex -= 1;
+      final item = _approvers.removeAt(oldIndex);
+      _approvers.insert(newIndex, item);
+    });
+  }
+
+  void _removeApprover(int index) {
+    setState(() => _approvers.removeAt(index));
+  }
+
+  // ── Submit ─────────────────────────────────────────────────────────
+  //
+  // FIX #2: Added better error handling and ensured the payload
+  // matches what the backend expects.
+
+  Future<void> _submit() async {
+    setState(() => _formError = null);
+    if (!_formKey.currentState!.validate()) return;
+    if (_approvers.isEmpty) {
+      setState(() => _formError = 'الرجاء اختيار معتمد واحد على الأقل.');
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    try {
+      final repo = ref.read(documentsRepositoryProvider);
+      await repo.createGenerated(
+        templateId: template.id,
+        title: _titleController.text.trim(),
+        description: _descriptionController.text.trim().isEmpty
+            ? null
+            : _descriptionController.text.trim(),
+        fieldValues: _collectFieldValues(),
+        workflowMode: _mode,
+        approverIds: _approvers.map((u) => u.id).toList(),
+      );
+
+      for (final type in DocumentListType.values) {
+        ref.read(documentsListProvider(type).notifier).refresh();
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم إنشاء المستند وإرساله للاعتماد.')),
+      );
+      // Pop back through the template picker to the home screen.
+      context.go('/');
+    } on ApiFailure catch (failure) {
+      setState(() {
+        _formError = arabicMessageFor(failure.code, fallback: failure.message);
+      });
+    } catch (e) {
+      setState(() {
+        _formError = 'حدث خطأ غير متوقع: $e';
+      });
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: Column(
+        children: [
+          _buildAppBar(context),
+          Expanded(
+            child: Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 120),
+                children: [
+                  // ── Template badge ──
+                  _TemplateBadge(template: template),
+                  const SizedBox(height: 20),
+
+                  // ── 1. Title ──
+                  _SectionHeader(
+                    icon: Icons.description_outlined,
+                    label: 'العنوان',
+                    required: true,
+                  ),
+                  _StyledTextField(
+                    controller: _titleController,
+                    hintText: 'عنوان المستند',
+                    maxLength: 255,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'الرجاء إدخال العنوان';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ── 2. Description ──
+                  _SectionHeader(
+                    icon: Icons.edit_outlined,
+                    label: 'الوصف (اختياري)',
+                  ),
+                  _StyledTextField(
+                    controller: _descriptionController,
+                    hintText: 'وصف موجز يساعد المعتمدين على فهم سياق المستند...',
+                    multiline: true,
+                    minLines: 3,
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ── 3. Dynamic fields from schema ──
+                  for (final field in template.fieldsSchema) ...[
+                    _SectionHeader(
+                      icon: _iconForFieldType(field['type'] as String),
+                      label: field['label'] as String? ?? field['key'] as String,
+                      required: field['required'] == true,
+                    ),
+                    _buildField(field),
+                    const SizedBox(height: 20),
+                  ],
+
+                  // ── 4. Approval mode ──
+                  _SectionHeader(
+                    icon: Icons.share_outlined,
+                    label: 'نمط الموافقة',
+                    required: true,
+                  ),
+                  _WorkflowModeSelector(
+                    mode: _mode,
+                    onChanged: (m) => setState(() => _mode = m),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ── 5. Approvers ──
+                  _SectionHeader(
+                    icon: Icons.group_outlined,
+                    label: 'المعتمدون',
+                    required: true,
+                  ),
+
+                  // Approver list
+                  if (_approvers.isNotEmpty) ...[
+                    ReorderableListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _approvers.length,
+                      onReorder: _reorderApprovers,
+                      proxyDecorator: (child, _, __) =>
+                          Material(color: Colors.transparent, child: child),
+                      itemBuilder: (context, index) {
+                        final user = _approvers[index];
+                        return ListTile(
+                          key: ValueKey(user.id),
+                          dense: true,
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 4),
+                          leading: GestureDetector(
+                            onTap: () => _removeApprover(index),
+                            child: const Icon(Icons.close,
+                                size: 18, color: AppColors.text3),
+                          ),
+                          title: Text(
+                            user.name,
+                            style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.text),
+                          ),
+                          subtitle: Text(
+                            user.email ?? '',
+                            style: const TextStyle(
+                                fontSize: 11, color: AppColors.text3),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.drag_handle,
+                                  size: 18, color: AppColors.text3),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+
+                  // Edit approvers button
+                  SizedBox(
+                    height: 42,
+                    child: OutlinedButton.icon(
+                      onPressed: _pickApprovers,
+                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      label: Text(
+                        _approvers.isEmpty
+                            ? 'اختيار المعتمدين'
+                            : 'تعديل قائمة المعتمدين',
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: const BorderSide(color: AppColors.border),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppColors.rLg),
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Error message
+                  if (_formError != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.rejected.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(AppColors.rMd),
+                        border: Border.all(
+                          color: AppColors.rejected.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.error_outline,
+                              size: 18,
+                              color: AppColors.rejected),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _formError!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.rejected,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          _buildBottomBar(),
+        ],
+      ),
+    );
+  }
+
+  IconData _iconForFieldType(String type) {
+    switch (type) {
+      case 'text':
+        return Icons.text_fields;
+      case 'number':
+        return Icons.numbers;
+      case 'textarea':
+        return Icons.notes;
+      case 'date':
+        return Icons.calendar_today_outlined;
+      case 'select':
+        return Icons.list;
+      case 'table':
+        return Icons.table_chart_outlined;
+      default:
+        return Icons.input;
+    }
+  }
+
+  // ── AppBar ─────────────────────────────────────────────────────────
+
+  Widget _buildAppBar(BuildContext context) {
+    final topPadding = MediaQuery.of(context).padding.top;
+    return Container(
+      padding: EdgeInsets.only(top: topPadding),
+      decoration: const BoxDecoration(color: AppColors.primary),
+      child: Stack(
+        children: [
+          Positioned(
+            bottom: -20,
+            right: -20,
+            child: Container(
+              width: 90,
+              height: 90,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [Color(0x2EC8A36B), Colors.transparent],
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+            child: Row(
+              children: [
+                const Spacer(),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'مستند جديد',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'إنشاء من قالب',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.white.withValues(alpha: 0.78),
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => Navigator.maybePop(context),
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.chevron_right,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Bottom bar ─────────────────────────────────────────────────────
+
+  Widget _buildBottomBar() {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        12,
+        16,
+        12 + MediaQuery.of(context).padding.bottom,
+      ),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+        boxShadow: AppColors.shActionBar,
+      ),
+      child: SizedBox(
+        height: 48,
+        child: ElevatedButton(
+          onPressed: _isSubmitting ? null : _submit,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.6),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppColors.rLg),
+            ),
+            elevation: 0,
+          ),
+          child: _isSubmitting
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white,
+                  ),
+                )
+              : const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check, color: Colors.white, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'إنشاء وإرسال للاعتماد',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  TEMPLATE BADGE
+// ═══════════════════════════════════════════════════════════════════════
+
+class _TemplateBadge extends StatelessWidget {
+  const _TemplateBadge({required this.template});
+  final DocumentTemplate template;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppColors.rMd),
+        border: Border.all(
+          color: AppColors.accent.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.auto_awesome, size: 18, color: AppColors.accent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              template.name,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.accent,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  SECTION HEADER
+// ═══════════════════════════════════════════════════════════════════════
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.icon,
+    required this.label,
+    this.required = false,
+  });
+  final IconData icon;
+  final String label;
+  final bool required;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: AppColors.text2),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.text,
+            ),
+          ),
+          if (required) ...[
+            const SizedBox(width: 4),
+            const Text(
+              '*',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppColors.rejected,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  STYLED TEXT FIELD
+// ═══════════════════════════════════════════════════════════════════════
+
+class _StyledTextField extends StatelessWidget {
+  const _StyledTextField({
+    required this.controller,
+    required this.hintText,
+    this.multiline = false,
+    this.minLines,
+    this.maxLength,
+    this.keyboardType,
+    this.inputFormatters,
+    this.validator,
+  });
+  final TextEditingController controller;
+  final String hintText;
+  final bool multiline;
+  final int? minLines;
+  final int? maxLength;
+  final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
+  final FormFieldValidator<String>? validator;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      maxLines: multiline ? null : 1,
+      minLines: minLines,
+      maxLength: maxLength,
+      keyboardType: keyboardType ?? (multiline ? TextInputType.multiline : null),
+      inputFormatters: inputFormatters,
+      textDirection: TextDirection.rtl,
+      textAlign: TextAlign.right,
+      validator: validator,
+      style: const TextStyle(fontSize: 14, color: AppColors.text),
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: const TextStyle(fontSize: 13, color: AppColors.text3),
+        filled: true,
+        fillColor: AppColors.surface,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppColors.rLg),
+          borderSide: const BorderSide(color: AppColors.border, width: 1.5),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppColors.rLg),
+          borderSide: const BorderSide(color: AppColors.border, width: 1.5),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppColors.rLg),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppColors.rLg),
+          borderSide: const BorderSide(color: AppColors.rejected, width: 1.5),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  DATE PICKER FIELD
+// ═══════════════════════════════════════════════════════════════════════
+
+class _DatePickerField extends StatelessWidget {
+  const _DatePickerField({
+    required this.controller,
+    this.required = false,
+  });
+  final TextEditingController controller;
+  final bool required;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      readOnly: true,
+      textDirection: TextDirection.rtl,
+      textAlign: TextAlign.right,
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: DateTime.now(),
+          firstDate: DateTime(2020),
+          lastDate: DateTime(2040),
+          locale: const Locale('ar'),
+        );
+        if (picked != null) {
+          controller.text = DateFormat('yyyy-MM-dd').format(picked);
+        }
+      },
+      validator: required
+          ? (v) =>
+              (v == null || v.trim().isEmpty) ? 'هذا الحقل مطلوب' : null
+          : null,
+      style: const TextStyle(fontSize: 14, color: AppColors.text),
+      decoration: InputDecoration(
+        hintText: 'اختر التاريخ',
+        hintStyle: const TextStyle(fontSize: 13, color: AppColors.text3),
+        suffixIcon:
+            const Icon(Icons.calendar_today, size: 18, color: AppColors.text3),
+        filled: true,
+        fillColor: AppColors.surface,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppColors.rLg),
+          borderSide: const BorderSide(color: AppColors.border, width: 1.5),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppColors.rLg),
+          borderSide: const BorderSide(color: AppColors.border, width: 1.5),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppColors.rLg),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppColors.rLg),
+          borderSide: const BorderSide(color: AppColors.rejected, width: 1.5),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  SELECT FIELD
+// ═══════════════════════════════════════════════════════════════════════
+
+class _SelectField extends StatelessWidget {
+  const _SelectField({
+    required this.value,
+    required this.options,
+    required this.onChanged,
+    this.required = false,
+  });
+  final String? value;
+  final List<String> options;
+  final ValueChanged<String?> onChanged;
+  final bool required;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String>(
+      value: value,
+      items: options
+          .map((o) => DropdownMenuItem(value: o, child: Text(o)))
+          .toList(),
+      onChanged: onChanged,
+      validator: required
+          ? (v) => (v == null || v.isEmpty) ? 'هذا الحقل مطلوب' : null
+          : null,
+      style: const TextStyle(fontSize: 14, color: AppColors.text),
+      decoration: InputDecoration(
+        hintText: 'اختر',
+        hintStyle: const TextStyle(fontSize: 13, color: AppColors.text3),
+        filled: true,
+        fillColor: AppColors.surface,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppColors.rLg),
+          borderSide: const BorderSide(color: AppColors.border, width: 1.5),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppColors.rLg),
+          borderSide: const BorderSide(color: AppColors.border, width: 1.5),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppColors.rLg),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppColors.rLg),
+          borderSide: const BorderSide(color: AppColors.rejected, width: 1.5),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  TABLE FIELD  — Card-based layout with per-row edit/view modes
+// ═══════════════════════════════════════════════════════════════════════
+
+class _TableField extends StatefulWidget {
+  const _TableField({
+    required this.columns,
+    required this.rows,
+    required this.onChanged,
+    this.required = false,
+    this.label = '',
+  });
+  final List<String> columns;
+  final List<List<String>> rows;
+  final ValueChanged<List<List<String>>> onChanged;
+  final bool required;
+  final String label;
+
+  @override
+  State<_TableField> createState() => _TableFieldState();
+}
+
+class _TableFieldState extends State<_TableField> {
+  final Map<String, TextEditingController> _cellControllers = {};
+  final Set<int> _editingRows = {};
+
+  TextEditingController _controllerFor(int row, int col) {
+    final key = '$row:$col';
+    if (!_cellControllers.containsKey(key)) {
+      final text = (widget.rows.length > row && widget.rows[row].length > col)
+          ? widget.rows[row][col]
+          : '';
+      _cellControllers[key] = TextEditingController(text: text);
+    }
+    return _cellControllers[key]!;
+  }
+
+  void _syncControllers() {
+    _cellControllers.removeWhere((key, ctrl) {
+      final r = int.parse(key.split(':')[0]);
+      if (r >= widget.rows.length) {
+        ctrl.dispose();
+        return true;
+      }
+      return false;
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _TableField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.rows.length != widget.rows.length) {
+      _syncControllers();
+      final old = Map<String, TextEditingController>.from(_cellControllers);
+      _cellControllers.clear();
+      for (int r = 0; r < widget.rows.length; r++) {
+        for (int c = 0; c < widget.columns.length; c++) {
+          final key = '$r:$c';
+          final text = widget.rows[r].length > c ? widget.rows[r][c] : '';
+          if (old.containsKey(key) && old[key]!.text == text) {
+            _cellControllers[key] = old.remove(key)!;
+          } else {
+            _cellControllers[key] = TextEditingController(text: text);
+          }
+        }
+      }
+      for (final ctrl in old.values) {
+        ctrl.dispose();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final ctrl in _cellControllers.values) {
+      ctrl.dispose();
+    }
+    super.dispose();
+  }
+
+  void _addRow() {
+    final newIdx = widget.rows.length;
+    final newRows = [...widget.rows, List.filled(widget.columns.length, '')];
+    widget.onChanged(newRows);
+    setState(() => _editingRows.add(newIdx));
+  }
+
+  void _removeRow(int index) {
+    for (int c = 0; c < widget.columns.length; c++) {
+      final key = '$index:$c';
+      _cellControllers[key]?.dispose();
+      _cellControllers.remove(key);
+    }
+    final updated = <int>{};
+    for (final i in _editingRows) {
+      if (i < index) updated.add(i);
+      if (i > index) updated.add(i - 1);
+    }
+    setState(() {
+      _editingRows.clear();
+      _editingRows.addAll(updated);
+    });
+    widget.onChanged([...widget.rows]..removeAt(index));
+  }
+
+  void _updateCell(int rowIndex, int colIndex, String value) {
+    final newRows = widget.rows.map((r) => List<String>.from(r)).toList();
+    newRows[rowIndex][colIndex] = value;
+    widget.onChanged(newRows);
+  }
+
+  // ── View card ──────────────────────────────────────────────────────
+
+  Widget _buildViewCard(int r) {
+    final row = widget.rows[r];
+    final title = row.isNotEmpty && row[0].isNotEmpty ? row[0] : '—';
+    final subtitle = row.length > 1
+        ? row.sublist(1).where((v) => v.isNotEmpty).join('  •  ')
+        : '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppColors.rLg),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0A1B2A41), blurRadius: 6, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            // Delete
+            GestureDetector(
+              onTap: () => _removeRow(r),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppColors.rejected.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.delete_outline,
+                    size: 16, color: AppColors.rejected),
+              ),
+            ),
+            const SizedBox(width: 6),
+            // Edit
+            GestureDetector(
+              onTap: () => setState(() => _editingRows.add(r)),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.edit_outlined,
+                    size: 16, color: AppColors.text2),
+              ),
+            ),
+            const SizedBox(width: 10),
+            // Content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    title,
+                    textAlign: TextAlign.right,
+                    textDirection: TextDirection.rtl,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.text,
+                    ),
+                  ),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      textAlign: TextAlign.right,
+                      textDirection: TextDirection.rtl,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 11, color: AppColors.text3),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            // Number badge
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                '${r + 1}',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Edit card ──────────────────────────────────────────────────────
+
+  Widget _buildEditCard(int r) {
+    final isNew = widget.rows[r].every((v) => v.isEmpty);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppColors.rLg),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0D1B2A41), blurRadius: 8, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header row
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: isNew
+                      ? () => _removeRow(r)
+                      : () => setState(() => _editingRows.remove(r)),
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: isNew
+                          ? AppColors.rejected.withValues(alpha: 0.1)
+                          : AppColors.surface,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      isNew ? Icons.delete_outline : Icons.close,
+                      size: 16,
+                      color: isNew ? AppColors.rejected : AppColors.text3,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    isNew ? 'بيانات العنصر' : 'قيد التحرير',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.text,
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '${r + 1}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            // Fields
+            for (int c = 0; c < widget.columns.length; c++) ...[
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  widget.columns[c],
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.text2,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _controllerFor(r, c),
+                onChanged: (v) => _updateCell(r, c, v),
+                textDirection: TextDirection.rtl,
+                textAlign: TextAlign.right,
+                style: const TextStyle(fontSize: 13, color: AppColors.text),
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  filled: true,
+                  fillColor: AppColors.surface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppColors.rMd),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppColors.rMd),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppColors.rMd),
+                    borderSide: const BorderSide(color: AppColors.primary),
+                  ),
+                ),
+              ),
+              if (c < widget.columns.length - 1) const SizedBox(height: 12),
+            ],
+            // Save button (only when re-editing an existing card)
+            if (!isNew) ...[
+              const SizedBox(height: 14),
+              SizedBox(
+                height: 36,
+                child: ElevatedButton(
+                  onPressed: () => setState(() => _editingRows.remove(r)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppColors.rMd),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text('حفظ',
+                      style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FormField<List<List<String>>>(
+      initialValue: widget.rows,
+      validator: widget.required
+          ? (_) => widget.rows.isEmpty ? 'أضف صفاً واحداً على الأقل' : null
+          : null,
+      builder: (state) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (widget.rows.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    '${widget.rows.length} ${widget.rows.length == 1 ? 'عنصر' : 'عناصر'}',
+                    style: const TextStyle(
+                        fontSize: 11, color: AppColors.text3),
+                  ),
+                ),
+              ),
+            for (int r = 0; r < widget.rows.length; r++)
+              _editingRows.contains(r)
+                  ? _buildEditCard(r)
+                  : _buildViewCard(r),
+            SizedBox(
+              height: 36,
+              child: OutlinedButton.icon(
+                onPressed: _addRow,
+                icon: const Icon(Icons.add, size: 16),
+                label: Text(
+                    widget.rows.isEmpty ? 'إضافة عنصر' : 'إضافة عنصر آخر'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  textStyle: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+            if (state.hasError) ...[
+              const SizedBox(height: 6),
+              Text(
+                state.errorText!,
+                style: const TextStyle(
+                    fontSize: 12, color: AppColors.rejected),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  SHARED WIDGETS (same patterns as CreateDocumentScreen)
+// ═══════════════════════════════════════════════════════════════════════
+
+class _WorkflowModeSelector extends StatelessWidget {
+  const _WorkflowModeSelector({
+    required this.mode,
+    required this.onChanged,
+  });
+  final WorkflowMode mode;
+  final ValueChanged<WorkflowMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _ModeCard(
+            isSelected: mode == WorkflowMode.sequential,
+            icon: Icons.format_list_numbered,
+            title: 'تسلسلي',
+            subtitle: 'يعتمد كل شخص بعد الآخر بالترتيب.',
+            onTap: () => onChanged(WorkflowMode.sequential),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _ModeCard(
+            isSelected: mode == WorkflowMode.parallel,
+            icon: Icons.group_outlined,
+            title: 'متوازي',
+            subtitle: 'الجميع يعتمد بنفس الوقت.',
+            onTap: () => onChanged(WorkflowMode.parallel),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ModeCard extends StatelessWidget {
+  const _ModeCard({
+    required this.isSelected,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+  final bool isSelected;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : Colors.white,
+          borderRadius: BorderRadius.circular(AppColors.rLg),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : AppColors.border,
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Colors.white.withValues(alpha: 0.16)
+                    : AppColors.accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon,
+                  size: 20,
+                  color: isSelected ? AppColors.accent : AppColors.primary),
+            ),
+            const SizedBox(height: 10),
+            Text(title,
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: isSelected ? Colors.white : AppColors.text)),
+            const SizedBox(height: 2),
+            Text(subtitle,
+                style: TextStyle(
+                    fontSize: 11,
+                    color: isSelected
+                        ? Colors.white.withValues(alpha: 0.78)
+                        : AppColors.text3)),
+          ],
+        ),
+      ),
+    );
+  }
+}

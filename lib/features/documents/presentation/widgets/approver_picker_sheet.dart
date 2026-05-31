@@ -127,7 +127,6 @@ class _ApproverPickerSheetState extends ConsumerState<ApproverPickerSheet> {
     }
   }
 
-  /// Real-time local filter by name OR email, case-insensitive.
   void _applyFilter() {
     final query = _searchController.text.trim().toLowerCase();
     setState(() {
@@ -136,8 +135,11 @@ class _ApproverPickerSheetState extends ConsumerState<ApproverPickerSheet> {
       } else {
         _filteredResults = _allResults.where((u) {
           final name = u.name.toLowerCase();
-          final email = (u.email ?? '').toLowerCase();
-          return name.contains(query) || email.contains(query);
+          final section = (u.sectionName ?? '').toLowerCase();
+          final department = (u.departmentName ?? '').toLowerCase();
+          return name.contains(query) ||
+              section.contains(query) ||
+              department.contains(query);
         }).toList();
       }
     });
@@ -170,12 +172,6 @@ class _ApproverPickerSheetState extends ConsumerState<ApproverPickerSheet> {
     return parts.first.characters.first;
   }
 
-  /// Subtitle built from available User fields.
-  /// TODO: if your User model gains a role / jobTitle field, prepend it
-  /// here so rows read "{role} · {email}".
-  String _subtitle(User user) {
-    return (user.email != null && user.email!.isNotEmpty) ? user.email! : '';
-  }
 
   // ── Build ──────────────────────────────────────────────────────────
 
@@ -480,9 +476,20 @@ class _ApproverPickerSheetState extends ConsumerState<ApproverPickerSheet> {
                       color: AppColors.text,
                     ),
                   ),
-                  if (_subtitle(user).isNotEmpty)
+                  if (user.departmentName != null &&
+                      user.departmentName!.isNotEmpty)
                     Text(
-                      _subtitle(user),
+                      'الادارة: ${user.departmentName}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.text2,
+                      ),
+                    ),
+                  if (user.sectionName != null && user.sectionName!.isNotEmpty)
+                    Text(
+                      'القسم: ${user.sectionName}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(

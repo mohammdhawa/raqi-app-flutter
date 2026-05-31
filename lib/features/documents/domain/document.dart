@@ -135,6 +135,9 @@ class Document {
     this.fileMime,
     this.fileSize,
     this.stampedFilePath,
+    this.origin = 'uploaded',
+    this.templateName,
+    this.documentNumber,
     this.nextPendingUsers = const [],
   });
 
@@ -155,10 +158,23 @@ class Document {
   final List<WorkflowStep> workflows;
   final List<DocumentLog> logs;
 
+  /// `'uploaded'` or `'generated'`. Defaults to `'uploaded'` for
+  /// backwards compatibility with existing documents.
+  final String origin;
+
+  /// The template name, if this document was generated from one.
+  final String? templateName;
+
+  /// Human-readable sequential reference, e.g. "PR-2026-0042".
+  final String? documentNumber;
+
   /// Only populated by the details endpoint. Tells us who needs to act
   /// next — for sequential mode this is one user, for parallel it can
   /// be many.
   final List<User> nextPendingUsers;
+
+  bool get isGenerated => origin == 'generated';
+  bool get isUploaded => origin == 'uploaded';
 
   /// True if the given [user] is currently expected to act on this doc.
   /// Per the docs, this is the canonical "is it my turn?" check.
@@ -175,6 +191,13 @@ class Document {
     Map<String, dynamic> json, {
     List<User> nextPendingUsers = const [],
   }) {
+    // Extract template name — may come nested or flat.
+    String? templateName;
+    final tpl = json['template'];
+    if (tpl is Map<String, dynamic>) {
+      templateName = tpl['name'] as String?;
+    }
+
     return Document(
       id: json['id'] as int,
       title: json['title'] as String,
@@ -187,6 +210,9 @@ class Document {
       status: DocumentStatus.fromString(json['status'] as String?),
       workflowMode: WorkflowMode.fromString(json['workflow_mode'] as String?),
       createdAt: _parseDate(json['created_at']) ?? DateTime.now(),
+      origin: (json['origin'] as String?) ?? 'uploaded',
+      templateName: templateName,
+      documentNumber: json['document_number'] as String?,
       creator: json['creator'] != null
           ? User.fromJson(json['creator'] as Map<String, dynamic>)
           : User.empty(),
@@ -214,6 +240,9 @@ class Document {
     status: status,
     workflowMode: workflowMode,
     createdAt: createdAt,
+    origin: origin,
+    templateName: templateName,
+    documentNumber: documentNumber,
     creator: creator,
     workflows: workflows,
     logs: logs,

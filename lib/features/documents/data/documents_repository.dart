@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../../../core/network/api_client.dart';
 import '../../auth/domain/user.dart';
 import '../domain/document.dart';
+import '../domain/document_template.dart';
 
 enum DocumentListType {
   inbox,
@@ -87,6 +88,50 @@ class DocumentsRepository {
 
     return _parseDocumentEnvelope(data);
   } 
+
+  // ── Template endpoints ───────────────────────────────────────────
+
+  /// `GET /document-templates`
+  Future<List<DocumentTemplate>> fetchTemplates() async {
+    final response = await _api.dio.get<Map<String, dynamic>>(
+      '/document-templates',
+    );
+    final paginator = response.data!['templates'] as Map<String, dynamic>;
+    return ((paginator['data'] as List?) ?? [])
+        .map((e) => DocumentTemplate.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// `POST /documents/generated` — JSON payload (no file upload).
+  /// The backend renders the PDF from the template + field values,
+  /// then feeds it into the same workflow as uploaded documents.
+  Future<Document> createGenerated({
+    required int templateId,
+    required String title,
+    String? description,
+    required Map<String, dynamic> fieldValues,
+    required WorkflowMode workflowMode,
+    required List<int> approverIds,
+  }) async {
+    final response = await _api.dio.post<Map<String, dynamic>>(
+      '/documents/generated',
+      data: {
+        'template_id': templateId,
+        'title': title,
+        if (description != null && description.isNotEmpty)
+          'description': description,
+        'field_values': fieldValues,
+        'workflow_mode': workflowMode.apiValue,
+        'approver_ids': approverIds,
+      },
+    );
+
+    final data = response.data;
+    if (data == null) {
+      throw Exception('Server returned null — status ${response.statusCode}');
+    }
+    return _parseDocumentEnvelope(data);
+  }
 
   /// `POST /documents/{id}/approve`
   Future<Document> approve(int id, {String? note}) async {

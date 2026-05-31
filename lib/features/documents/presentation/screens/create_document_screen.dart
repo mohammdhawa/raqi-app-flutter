@@ -13,6 +13,7 @@ import '../../data/documents_repository.dart';
 import '../../domain/document.dart';
 import '../providers/documents_list_controller.dart';
 import '../widgets/approver_picker_sheet.dart';
+import 'template_picker_screen.dart';
 
 // ═══════════════════════════════════════════════════════════════════════
 //  CREATE DOCUMENT SCREEN
@@ -202,6 +203,18 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 120),
                 children: [
+                  // ── 0. Creation mode toggle ──
+                  _CreationModeToggle(
+                    onTemplateTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const TemplatePickerScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
+
                   // ── 1. Title section ──
                   _AlraqiSectionHeader(
                     icon: Icons.description_outlined,
@@ -501,6 +514,79 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
                 ),
         ),
       ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  CREATION MODE TOGGLE
+// ═══════════════════════════════════════════════════════════════════════
+
+class _CreationModeToggle extends StatelessWidget {
+  const _CreationModeToggle({required this.onTemplateTap});
+  final VoidCallback onTemplateTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        // Upload mode (currently active — this screen IS the upload flow)
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(AppColors.rMd),
+            ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.upload_file_outlined, size: 18, color: Colors.white),
+                SizedBox(width: 8),
+                Text(
+                  'رفع ملف',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Template mode — navigates away
+        Expanded(
+          child: GestureDetector(
+            onTap: onTemplateTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(AppColors.rMd),
+                border: Border.all(color: AppColors.border, width: 1.5),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.auto_awesome_outlined,
+                      size: 18, color: AppColors.primary),
+                  SizedBox(width: 8),
+                  Text(
+                    'إنشاء من قالب',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1161,7 +1247,7 @@ class _ApproversList extends StatelessWidget {
 
               const SizedBox(width: 12),
 
-              // Name + email
+              // Name + department + section
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1174,9 +1260,23 @@ class _ApproversList extends StatelessWidget {
                         color: AppColors.text,
                       ),
                     ),
-                    if (user.email != null && user.email!.isNotEmpty)
+                    if (user.departmentName != null &&
+                        user.departmentName!.isNotEmpty)
                       Text(
-                        user.email!,
+                        'الادارة: ${user.departmentName}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.text2,
+                        ),
+                      ),
+                    if (user.sectionName != null &&
+                        user.sectionName!.isNotEmpty)
+                      Text(
+                        'القسم: ${user.sectionName}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 11,
                           color: AppColors.text2,
