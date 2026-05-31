@@ -32,10 +32,16 @@ class _GeneratedDocumentFormScreenState
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _exportController = TextEditingController();
+  final _importController = TextEditingController();
   WorkflowMode _mode = WorkflowMode.sequential;
   List<User> _approvers = [];
   bool _isSubmitting = false;
+  bool _isLoadingCounters = false;
+  DocumentCounters? _counters;
   String? _formError;
+  String? _exportError;
+  String? _importError;
 
   /// Dynamic field controllers — keyed by field key from schema.
   final Map<String, TextEditingController> _fieldControllers = {};
@@ -66,12 +72,40 @@ class _GeneratedDocumentFormScreenState
         _fieldControllers[key] = TextEditingController();
       }
     }
+
+    // Fetch suggested counters after the first frame so ref is ready.
+    Future.microtask(_loadCounters);
+  }
+
+  Future<void> _loadCounters() async {
+    if (!mounted) return;
+    setState(() => _isLoadingCounters = true);
+    try {
+      final counters = await ref.read(documentsRepositoryProvider).fetchNextCounters();
+      if (!mounted) return;
+      setState(() {
+        _counters = counters;
+        _isLoadingCounters = false;
+        // Pre-fill export only when counter is already initialized.
+        if (counters.exportIsInitialized) {
+          _exportController.text = counters.exportNextNumber.toString();
+        }
+        // Pre-fill import if the server returned a suggested number.
+        if (counters.importNextNumber != null) {
+          _importController.text = counters.importNextNumber.toString();
+        }
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingCounters = false);
+    }
   }
 
   @override
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
+    _exportController.dispose();
+    _importController.dispose();
     for (final c in _fieldControllers.values) {
       c.dispose();
     }
@@ -222,12 +256,27 @@ class _GeneratedDocumentFormScreenState
   // matches what the backend expects.
 
   Future<void> _submit() async {
-    setState(() => _formError = null);
+    setState(() {
+      _formError = null;
+      _exportError = null;
+      _importError = null;
+    });
     if (!_formKey.currentState!.validate()) return;
     if (_approvers.isEmpty) {
       setState(() => _formError = 'الرجاء اختيار معتمد واحد على الأقل.');
       return;
     }
+
+    // When the counter is not initialized, export_number is required.
+    final exportText = _exportController.text.trim();
+    if (_counters != null && !_counters!.exportIsInitialized && exportText.isEmpty) {
+      setState(() => _exportError = 'يرجى إدخال رقم الصادر لتحديد نقطة البداية.');
+      return;
+    }
+
+    final exportNumber = exportText.isNotEmpty ? int.tryParse(exportText) : null;
+    final importText = _importController.text.trim();
+    final importNumber = importText.isNotEmpty ? int.tryParse(importText) : null;
 
     setState(() => _isSubmitting = true);
     try {
@@ -241,6 +290,8 @@ class _GeneratedDocumentFormScreenState
         fieldValues: _collectFieldValues(),
         workflowMode: _mode,
         approverIds: _approvers.map((u) => u.id).toList(),
+        exportNumber: exportNumber,
+        importNumber: importNumber,
       );
 
       for (final type in DocumentListType.values) {
@@ -254,8 +305,14 @@ class _GeneratedDocumentFormScreenState
       // Pop back through the template picker to the home screen.
       context.go('/');
     } on ApiFailure catch (failure) {
+      final exportErr = failure.firstErrorFor('export_number');
+      final importErr = failure.firstErrorFor('import_number');
       setState(() {
-        _formError = arabicMessageFor(failure.code, fallback: failure.message);
+        _exportError = exportErr;
+        _importError = importErr;
+        if (exportErr == null && importErr == null) {
+          _formError = arabicMessageFor(failure.code, fallback: failure.message);
+        }
       });
     } catch (e) {
       setState(() {
@@ -317,7 +374,59 @@ class _GeneratedDocumentFormScreenState
                   ),
                   const SizedBox(height: 20),
 
-                  // ── 3. Dynamic fields from schema ──
+                  // ── 3. Export / Import numbers ──
+                  _SectionHeader(
+                    icon: Icons.outbox_outlined,
+                    label: 'رقم الصادر',
+                    required: _counters != null && !_counters!.exportIsInitialized,
+                  ),
+                  if (_isLoadingCounters)
+                    const _NumbersLoadingRow()
+                  else ...[
+                    _StyledTextField(
+                      controller: _exportController,
+                      hintText: 'رقم الصادر',
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
+                    ),
+                    if (_counters != null && !_counters!.exportIsInitialized) ...[
+                      const SizedBox(height: 6),
+                      const _HintText(
+                        'هذا أول مستند صادر في القسم — يرجى إدخال رقم البداية',
+                      ),
+                    ],
+                    if (_exportError != null) ...[
+                      const SizedBox(height: 4),
+                      _FieldErrorText(_exportError!),
+                    ],
+                  ],
+                  const SizedBox(height: 20),
+
+                  _SectionHeader(
+                    icon: Icons.move_to_inbox_outlined,
+                    label: 'رقم الوارد (اختياري)',
+                  ),
+                  if (_isLoadingCounters)
+                    const _NumbersLoadingRow()
+                  else ...[
+                    _StyledTextField(
+                      controller: _importController,
+                      hintText: 'رقم الوارد (اختياري)',
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
+                    ),
+                    if (_importError != null) ...[
+                      const SizedBox(height: 4),
+                      _FieldErrorText(_importError!),
+                    ],
+                  ],
+                  const SizedBox(height: 20),
+
+                  // ── 4. Dynamic fields from schema ──
                   for (final field in template.fieldsSchema) ...[
                     _SectionHeader(
                       icon: _iconForFieldType(field['type'] as String),
@@ -328,7 +437,7 @@ class _GeneratedDocumentFormScreenState
                     const SizedBox(height: 20),
                   ],
 
-                  // ── 4. Approval mode ──
+                  // ── 5. Approval mode ──
                   _SectionHeader(
                     icon: Icons.share_outlined,
                     label: 'نمط الموافقة',
@@ -340,7 +449,7 @@ class _GeneratedDocumentFormScreenState
                   ),
                   const SizedBox(height: 20),
 
-                  // ── 5. Approvers ──
+                  // ── 6. Approvers ──
                   _SectionHeader(
                     icon: Icons.group_outlined,
                     label: 'المعتمدون',
@@ -588,7 +697,7 @@ class _GeneratedDocumentFormScreenState
       child: SizedBox(
         height: 48,
         child: ElevatedButton(
-          onPressed: _isSubmitting ? null : _submit,
+          onPressed: (_isSubmitting || _isLoadingCounters) ? null : _submit,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.6),
@@ -802,9 +911,8 @@ class _DatePickerField extends StatelessWidget {
         final picked = await showDatePicker(
           context: context,
           initialDate: DateTime.now(),
-          firstDate: DateTime(2020),
-          lastDate: DateTime(2040),
-          locale: const Locale('ar'),
+          firstDate: DateTime(1920),
+          lastDate: DateTime(2100),
         );
         if (picked != null) {
           controller.text = DateFormat('yyyy-MM-dd').format(picked);
@@ -1321,6 +1429,87 @@ class _TableFieldState extends State<_TableField> {
           ],
         );
       },
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  NUMBER FIELD HELPERS
+// ═══════════════════════════════════════════════════════════════════════
+
+class _NumbersLoadingRow extends StatelessWidget {
+  const _NumbersLoadingRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 50,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppColors.rLg),
+        border: Border.all(color: AppColors.border, width: 1.5),
+      ),
+      alignment: Alignment.center,
+      child: const SizedBox(
+        width: 18,
+        height: 18,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: AppColors.primary,
+        ),
+      ),
+    );
+  }
+}
+
+class _HintText extends StatelessWidget {
+  const _HintText(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.info_outline, size: 13, color: AppColors.accent),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(
+            text,
+            textDirection: TextDirection.rtl,
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.accent,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FieldErrorText extends StatelessWidget {
+  const _FieldErrorText(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.error_outline, size: 13, color: AppColors.rejected),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(
+            text,
+            textDirection: TextDirection.rtl,
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.rejected,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

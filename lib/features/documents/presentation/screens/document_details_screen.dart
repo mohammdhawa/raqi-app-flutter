@@ -424,6 +424,41 @@ class _Header extends StatelessWidget {
                   ),
                 ],
               ),
+              // Numbers row — export always, import only when non-null
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(
+                    Icons.outbox_outlined,
+                    size: 14,
+                    color: Colors.white.withValues(alpha: 0.90),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'الصادر: ${document.exportNumber?.toString() ?? '-'}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.white.withValues(alpha: 0.90),
+                    ),
+                  ),
+                  if (document.importNumber != null) ...[
+                    const SizedBox(width: 14),
+                    Icon(
+                      Icons.move_to_inbox_outlined,
+                      size: 14,
+                      color: Colors.white.withValues(alpha: 0.90),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'الوارد: ${document.importNumber}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.white.withValues(alpha: 0.90),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
               // Origin badge — shown for generated documents
               if (document.isGenerated) ...[
                 const SizedBox(height: 8),

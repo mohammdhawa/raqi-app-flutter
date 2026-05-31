@@ -16,6 +16,32 @@ enum DocumentListType {
   String get apiValue => name;
 }
 
+/// Suggested next counters returned by `GET /document-counters/next`.
+class DocumentCounters {
+  const DocumentCounters({
+    required this.sectionId,
+    required this.exportNextNumber,
+    required this.exportIsInitialized,
+    this.importNextNumber,
+  });
+
+  final int sectionId;
+  final int exportNextNumber;
+  final bool exportIsInitialized;
+  final int? importNextNumber;
+
+  factory DocumentCounters.fromJson(Map<String, dynamic> json) {
+    final exp = json['export'] as Map<String, dynamic>;
+    final imp = json['import'] as Map<String, dynamic>?;
+    return DocumentCounters(
+      sectionId: (json['section_id'] as num).toInt(),
+      exportNextNumber: (exp['next_number'] as num).toInt(),
+      exportIsInitialized: exp['is_initialized'] as bool,
+      importNextNumber: (imp?['next_number'] as num?)?.toInt(),
+    );
+  }
+}
+
 /// Wraps every document-related endpoint from sections 5 and 6 of the API
 /// docs. Returns parsed domain objects; throws [ApiFailure] on errors
 /// (mapped by the [ApiClient] interceptor).
@@ -89,6 +115,16 @@ class DocumentsRepository {
     return _parseDocumentEnvelope(data);
   } 
 
+  // ── Counter endpoint ──────────────────────────────────────────────
+
+  /// `GET /document-counters/next`
+  Future<DocumentCounters> fetchNextCounters() async {
+    final response = await _api.dio.get<Map<String, dynamic>>(
+      '/document-counters/next',
+    );
+    return DocumentCounters.fromJson(response.data!);
+  }
+
   // ── Template endpoints ───────────────────────────────────────────
 
   /// `GET /document-templates`
@@ -112,6 +148,8 @@ class DocumentsRepository {
     required Map<String, dynamic> fieldValues,
     required WorkflowMode workflowMode,
     required List<int> approverIds,
+    int? exportNumber,
+    int? importNumber,
   }) async {
     final response = await _api.dio.post<Map<String, dynamic>>(
       '/documents/generated',
@@ -123,6 +161,8 @@ class DocumentsRepository {
         'field_values': fieldValues,
         'workflow_mode': workflowMode.apiValue,
         'approver_ids': approverIds,
+        if (exportNumber != null) 'export_number': exportNumber,
+        if (importNumber != null) 'import_number': importNumber,
       },
     );
 

@@ -43,6 +43,7 @@ enum ApiErrorCode {
   invalidWorkflow,
   chiefCannotActYet,
   chiefAlreadyExists,
+  counterNotInitialized,
   serverError,
   network, // client-side: no internet / timeout
   unknown;
@@ -71,6 +72,8 @@ enum ApiErrorCode {
         return ApiErrorCode.chiefCannotActYet;
       case 'chief_already_exists':
         return ApiErrorCode.chiefAlreadyExists;
+      case 'counter_not_initialized':
+        return ApiErrorCode.counterNotInitialized;
       case 'server_error':
         return ApiErrorCode.serverError;
       default:
@@ -105,6 +108,8 @@ String arabicMessageFor(ApiErrorCode code, {String? fallback}) {
       return 'لا يمكن للمسؤول الأعلى اتخاذ إجراء قبل انتهاء جميع المدراء من قراراتهم.';
     case ApiErrorCode.chiefAlreadyExists:
       return 'يوجد مسؤول أعلى بالفعل. مسموح بواحد فقط.';
+    case ApiErrorCode.counterNotInitialized:
+      return 'لم يتم تهيئة عداد المستندات بعد. يرجى إدخال رقم الصادر يدوياً.';
     case ApiErrorCode.serverError:
       return 'خطأ في الخادم. حاول مرة أخرى.';
     case ApiErrorCode.network:

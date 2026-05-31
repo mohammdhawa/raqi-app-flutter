@@ -138,6 +138,9 @@ class Document {
     this.origin = 'uploaded',
     this.templateName,
     this.documentNumber,
+    this.sectionId,
+    this.exportNumber,
+    this.importNumber,
     this.nextPendingUsers = const [],
   });
 
@@ -167,6 +170,15 @@ class Document {
 
   /// Human-readable sequential reference, e.g. "PR-2026-0042".
   final String? documentNumber;
+
+  /// The section that owns this document.
+  final int? sectionId;
+
+  /// رقم الصادر — outgoing document number. Always shown in UI (use '-' if null).
+  final int? exportNumber;
+
+  /// رقم الوارد — incoming document number. Hide the row in UI if null.
+  final int? importNumber;
 
   /// Only populated by the details endpoint. Tells us who needs to act
   /// next — for sequential mode this is one user, for parallel it can
@@ -213,6 +225,9 @@ class Document {
       origin: (json['origin'] as String?) ?? 'uploaded',
       templateName: templateName,
       documentNumber: json['document_number'] as String?,
+      sectionId: (json['section_id'] as num?)?.toInt(),
+      exportNumber: (json['export_number'] as num?)?.toInt(),
+      importNumber: (json['import_number'] as num?)?.toInt(),
       creator: json['creator'] != null
           ? User.fromJson(json['creator'] as Map<String, dynamic>)
           : User.empty(),
@@ -243,6 +258,9 @@ class Document {
     origin: origin,
     templateName: templateName,
     documentNumber: documentNumber,
+    sectionId: sectionId,
+    exportNumber: exportNumber,
+    importNumber: importNumber,
     creator: creator,
     workflows: workflows,
     logs: logs,
