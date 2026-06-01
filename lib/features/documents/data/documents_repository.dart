@@ -203,7 +203,10 @@ class DocumentsRepository {
       '/documents/$documentId/comments',
       data: {'comment': comment, 'visibility': visibility},
     );
-    return DocumentComment.fromJson(response.data!);
+    final body = response.data!;
+    final commentJson =
+        body['data'] is Map ? body['data'] as Map<String, dynamic> : body;
+    return DocumentComment.fromJson(commentJson);
   }
 
   /// `POST /documents/{id}/reject`

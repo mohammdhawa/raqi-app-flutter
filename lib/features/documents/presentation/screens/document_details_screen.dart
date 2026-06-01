@@ -20,6 +20,7 @@ import '../../domain/document.dart';
 import '../providers/document_comments_controller.dart';
 import '../providers/document_details_controller.dart';
 import '../providers/documents_list_controller.dart';
+import '../widgets/document_comments_section.dart';
 import '../widgets/workflow_stepper.dart';
 import '../../../../core/storage/token_storage.dart';
 
@@ -213,8 +214,8 @@ class _DocumentDetailsScreenState
       ),
       body: _DetailsBody(
         state: state,
-        documentId: documentId,
         onRefresh: controller.load,
+        documentId: documentId,
       ),
       bottomNavigationBar: _ActionBar(
         document: state.document,
@@ -240,33 +241,60 @@ class _DocumentDetailsScreenState
 // Body
 // ---------------------------------------------------------------------------
 
-class _DetailsBody extends StatelessWidget {
+class _DetailsBody extends StatefulWidget {
   const _DetailsBody({
     required this.state,
-    required this.documentId,
     required this.onRefresh,
+    required this.documentId,
   });
 
   final DocumentDetailsState state;
-  final int documentId;
   final Future<void> Function() onRefresh;
+  final int documentId;
+
+  @override
+  State<_DetailsBody> createState() => _DetailsBodyState();
+}
+
+class _DetailsBodyState extends State<_DetailsBody> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (state.isLoading && state.document == null) {
+    if (widget.state.isLoading && widget.state.document == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (state.error != null && state.document == null) {
-      return ErrorStateView(failure: state.error!, onRetry: onRefresh);
+    if (widget.state.error != null && widget.state.document == null) {
+      return ErrorStateView(
+          failure: widget.state.error!, onRetry: widget.onRefresh);
     }
-    final doc = state.document;
+    final doc = widget.state.document;
     if (doc == null) {
       return const SizedBox.shrink();
     }
     return RefreshIndicator(
       color: AppColors.primary,
-      onRefresh: onRefresh,
+      onRefresh: widget.onRefresh,
       child: ListView(
+        controller: _scrollController,
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
           _Header(document: doc),
@@ -281,7 +309,10 @@ class _DetailsBody extends StatelessWidget {
           const SizedBox(height: 16),
           _LogsCard(logs: doc.logs),
           const SizedBox(height: 16),
-          _CommentsCard(documentId: documentId),
+          DocumentCommentsSection(
+            documentId: widget.documentId,
+            onScrollToBottom: _scrollToBottom,
+          ),
           const SizedBox(height: 24),
         ],
       ),
