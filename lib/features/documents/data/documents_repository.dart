@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../core/errors/api_failure.dart';
 import '../../../core/network/api_client.dart';
 import '../../auth/domain/user.dart';
 import '../domain/document.dart';
@@ -50,23 +51,34 @@ class DocumentsRepository {
 
   final ApiClient _api;
 
+  // Dio rejects with DioException(error: ApiFailure); unwrap so callers can
+  // use `on ApiFailure catch` directly.
+  Future<T> _run<T>(Future<T> Function() call) async {
+    try {
+      return await call();
+    } on DioException catch (e) {
+      if (e.error is ApiFailure) throw e.error as ApiFailure;
+      rethrow;
+    }
+  }
+
   /// `GET /documents?type=inbox|sent&page=N`
   Future<DocumentsPage> list({
     required DocumentListType type,
     int page = 1,
   }) async {
-    final response = await _api.dio.get<Map<String, dynamic>>(
+    final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
       '/documents',
       queryParameters: {'type': type.apiValue, 'page': page},
-    );
+    ));
     return DocumentsPage.fromJson(response.data!);
   }
 
   /// `GET /documents/{id}`
   Future<Document> getById(int id) async {
-    final response = await _api.dio.get<Map<String, dynamic>>(
+    final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
       '/documents/$id',
-    );
+    ));
     return _parseDocumentEnvelope(response.data!);
   }
 
@@ -91,11 +103,11 @@ class DocumentsRepository {
       ),
     });
 
-    final response = await _api.dio.post(
+    final response = await _run(() => _api.dio.post(
       '/documents',
       data: form,
       options: Options(contentType: 'multipart/form-data'),
-    );
+    ));
 
     debugPrint('=== CREATE RESPONSE ===');
     debugPrint('Status: ${response.statusCode}');
@@ -119,9 +131,9 @@ class DocumentsRepository {
 
   /// `GET /document-counters/next`
   Future<DocumentCounters> fetchNextCounters() async {
-    final response = await _api.dio.get<Map<String, dynamic>>(
+    final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
       '/document-counters/next',
-    );
+    ));
     return DocumentCounters.fromJson(response.data!);
   }
 
@@ -129,9 +141,9 @@ class DocumentsRepository {
 
   /// `GET /document-templates`
   Future<List<DocumentTemplate>> fetchTemplates() async {
-    final response = await _api.dio.get<Map<String, dynamic>>(
+    final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
       '/document-templates',
-    );
+    ));
     final paginator = response.data!['templates'] as Map<String, dynamic>;
     return ((paginator['data'] as List?) ?? [])
         .map((e) => DocumentTemplate.fromJson(e as Map<String, dynamic>))
@@ -151,7 +163,7 @@ class DocumentsRepository {
     int? exportNumber,
     int? importNumber,
   }) async {
-    final response = await _api.dio.post<Map<String, dynamic>>(
+    final response = await _run(() => _api.dio.post<Map<String, dynamic>>(
       '/documents/generated',
       data: {
         'template_id': templateId,
@@ -164,7 +176,7 @@ class DocumentsRepository {
         if (exportNumber != null) 'export_number': exportNumber,
         if (importNumber != null) 'import_number': importNumber,
       },
-    );
+    ));
 
     final data = response.data;
     if (data == null) {
@@ -175,18 +187,18 @@ class DocumentsRepository {
 
   /// `POST /documents/{id}/approve`
   Future<Document> approve(int id, {String? note}) async {
-    final response = await _api.dio.post<Map<String, dynamic>>(
+    final response = await _run(() => _api.dio.post<Map<String, dynamic>>(
       '/documents/$id/approve',
       data: {if (note != null && note.isNotEmpty) 'note': note},
-    );
+    ));
     return _parseDocumentEnvelope(response.data!);
   }
 
   /// `GET /documents/{id}/comments`
   Future<List<DocumentComment>> getComments(int documentId) async {
-    final response = await _api.dio.get<Map<String, dynamic>>(
+    final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
       '/documents/$documentId/comments',
-    );
+    ));
     final data = (response.data!['data'] as List?) ?? [];
     return data
         .map((e) => DocumentComment.fromJson(e as Map<String, dynamic>))
@@ -199,10 +211,10 @@ class DocumentsRepository {
     required String comment,
     String visibility = 'all',
   }) async {
-    final response = await _api.dio.post<Map<String, dynamic>>(
+    final response = await _run(() => _api.dio.post<Map<String, dynamic>>(
       '/documents/$documentId/comments',
       data: {'comment': comment, 'visibility': visibility},
-    );
+    ));
     final body = response.data!;
     final commentJson =
         body['data'] is Map ? body['data'] as Map<String, dynamic> : body;
@@ -211,10 +223,10 @@ class DocumentsRepository {
 
   /// `POST /documents/{id}/reject`
   Future<Document> reject(int id, {String? note}) async {
-    final response = await _api.dio.post<Map<String, dynamic>>(
+    final response = await _run(() => _api.dio.post<Map<String, dynamic>>(
       '/documents/$id/reject',
       data: {if (note != null && note.isNotEmpty) 'note': note},
-    );
+    ));
     return _parseDocumentEnvelope(response.data!);
   }
 

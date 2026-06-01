@@ -1,5 +1,7 @@
+import 'package:dio/dio.dart' show DioException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/errors/api_failure.dart';
 import '../../../core/network/api_client.dart';
 import '../../auth/domain/user.dart';
 
@@ -10,14 +12,23 @@ class UsersRepository {
 
   final ApiClient _api;
 
+  Future<T> _run<T>(Future<T> Function() call) async {
+    try {
+      return await call();
+    } on DioException catch (e) {
+      if (e.error is ApiFailure) throw e.error as ApiFailure;
+      rethrow;
+    }
+  }
+
   Future<List<User>> searchPotentialApprovers({String? search}) async {
-    final response = await _api.dio.get<Map<String, dynamic>>(
+    final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
       '/managers',
       queryParameters: {
         if (search != null && search.isNotEmpty) 'search': search,
         'per_page': 50,
       },
-    );
+    ));
     final data = response.data!;
     final paginator = data['managers'] as Map<String, dynamic>?;
     if (paginator == null) return [];

@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
+import 'package:dio/dio.dart' show DioException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/errors/api_failure.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/storage/token_storage.dart';
 import '../domain/user.dart';
@@ -25,11 +27,20 @@ class AuthRepository {
   final ApiClient _api;
   final TokenStorage _storage;
 
+  Future<T> _run<T>(Future<T> Function() call) async {
+    try {
+      return await call();
+    } on DioException catch (e) {
+      if (e.error is ApiFailure) throw e.error as ApiFailure;
+      rethrow;
+    }
+  }
+
   Future<AuthResult> login({
     required String email,
     required String password,
   }) async {
-    final response = await _api.dio.post<Map<String, dynamic>>(
+    final response = await _run(() => _api.dio.post<Map<String, dynamic>>(
       '/login',
       data: {
         'email': email,
@@ -37,7 +48,7 @@ class AuthRepository {
         'platform': 'mobile',
         'device_name': 'Flutter ${Platform.operatingSystem}',
       },
-    );
+    ));
     final data = response.data!;
     final token = data['token'] as String;
     final user = User.fromJson(data['user'] as Map<String, dynamic>);

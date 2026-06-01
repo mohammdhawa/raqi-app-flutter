@@ -42,6 +42,7 @@ class _GeneratedDocumentFormScreenState
   String? _formError;
   String? _exportError;
   String? _importError;
+  Map<String, String> _fieldApiErrors = {};
 
   /// Dynamic field controllers — keyed by field key from schema.
   final Map<String, TextEditingController> _fieldControllers = {};
@@ -260,6 +261,7 @@ class _GeneratedDocumentFormScreenState
       _formError = null;
       _exportError = null;
       _importError = null;
+      _fieldApiErrors = {};
     });
     if (!_formKey.currentState!.validate()) return;
     if (_approvers.isEmpty) {
@@ -307,10 +309,34 @@ class _GeneratedDocumentFormScreenState
     } on ApiFailure catch (failure) {
       final exportErr = failure.firstErrorFor('export_number');
       final importErr = failure.firstErrorFor('import_number');
+
+      // Extract per-field errors for each template field.
+      // Laravel sends them as "field_values.key"; fall back to bare "key".
+      final newFieldErrors = <String, String>{};
+      if (failure.fieldErrors != null) {
+        for (final field in template.fieldsSchema) {
+          final key = field['key'] as String;
+          final err = failure.firstErrorFor('field_values.$key')
+              ?? failure.firstErrorFor(key);
+          if (err != null) newFieldErrors[key] = err;
+        }
+      }
+
       setState(() {
         _exportError = exportErr;
         _importError = importErr;
-        if (exportErr == null && importErr == null) {
+        _fieldApiErrors = newFieldErrors;
+
+        if (newFieldErrors.isNotEmpty) {
+          final labels = newFieldErrors.keys.map((k) {
+            final field = template.fieldsSchema.firstWhere(
+              (f) => f['key'] == k,
+              orElse: () => <String, dynamic>{'label': k},
+            );
+            return field['label'] as String? ?? k;
+          }).join('، ');
+          _formError = 'يرجى مراجعة الحقول التالية: $labels';
+        } else if (exportErr == null && importErr == null) {
           _formError = arabicMessageFor(failure.code, fallback: failure.message);
         }
       });
@@ -434,6 +460,10 @@ class _GeneratedDocumentFormScreenState
                       required: field['required'] == true,
                     ),
                     _buildField(field),
+                    if (_fieldApiErrors[field['key'] as String] != null) ...[
+                      const SizedBox(height: 4),
+                      _FieldErrorText(_fieldApiErrors[field['key'] as String]!),
+                    ],
                     const SizedBox(height: 20),
                   ],
 
