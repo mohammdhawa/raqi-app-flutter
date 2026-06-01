@@ -129,6 +129,44 @@ class AlraqiDocCard extends StatelessWidget {
                               ),
                             ],
                           ),
+                          // Numbers row — only when at least one is present
+                          if (document.exportNumber != null ||
+                              document.importNumber != null) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.outbox_outlined,
+                                  size: 12,
+                                  color: AppColors.text3,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'صادر: ${document.exportNumber?.toString() ?? '-'}',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: AppColors.text3,
+                                  ),
+                                ),
+                                if (document.importNumber != null) ...[
+                                  const SizedBox(width: 10),
+                                  const Icon(
+                                    Icons.move_to_inbox_outlined,
+                                    size: 12,
+                                    color: AppColors.text3,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    'وارد: ${document.importNumber}',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: AppColors.text3,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
