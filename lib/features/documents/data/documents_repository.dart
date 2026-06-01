@@ -43,6 +43,17 @@ class DocumentCounters {
   }
 }
 
+class TemplatesPage {
+  const TemplatesPage({
+    required this.templates,
+    required this.currentPage,
+    required this.lastPage,
+  });
+  final List<DocumentTemplate> templates;
+  final int currentPage;
+  final int lastPage;
+}
+
 /// Wraps every document-related endpoint from sections 5 and 6 of the API
 /// docs. Returns parsed domain objects; throws [ApiFailure] on errors
 /// (mapped by the [ApiClient] interceptor).
@@ -139,15 +150,24 @@ class DocumentsRepository {
 
   // ── Template endpoints ───────────────────────────────────────────
 
-  /// `GET /document-templates`
-  Future<List<DocumentTemplate>> fetchTemplates() async {
+  /// `GET /document-templates?search=&page=`
+  Future<TemplatesPage> fetchTemplates({String? search, int page = 1}) async {
     final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
       '/document-templates',
+      queryParameters: {
+        if (search != null && search.isNotEmpty) 'search': search,
+        'page': page,
+      },
     ));
     final paginator = response.data!['templates'] as Map<String, dynamic>;
-    return ((paginator['data'] as List?) ?? [])
+    final templates = ((paginator['data'] as List?) ?? [])
         .map((e) => DocumentTemplate.fromJson(e as Map<String, dynamic>))
         .toList();
+    return TemplatesPage(
+      templates: templates,
+      currentPage: (paginator['current_page'] as num).toInt(),
+      lastPage: (paginator['last_page'] as num).toInt(),
+    );
   }
 
   /// `POST /documents/generated` — JSON payload (no file upload).

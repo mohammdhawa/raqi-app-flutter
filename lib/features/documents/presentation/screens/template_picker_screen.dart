@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,27 +22,73 @@ class TemplatePickerScreen extends ConsumerStatefulWidget {
 }
 
 class _TemplatePickerScreenState extends ConsumerState<TemplatePickerScreen> {
-  List<DocumentTemplate>? _templates;
+  final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
+  Timer? _debounce;
+
+  List<DocumentTemplate> _templates = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
   String? _error;
+  int _currentPage = 1;
+  int _lastPage = 1;
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _loadTemplates();
+    _scrollController.addListener(_onScroll);
+    _loadTemplates(reset: true);
   }
 
-  Future<void> _loadTemplates() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      _loadMore();
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      if (value != _searchQuery) {
+        setState(() => _searchQuery = value);
+        _loadTemplates(reset: true);
+      }
     });
+  }
+
+  Future<void> _loadTemplates({bool reset = false}) async {
+    if (reset) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+        _templates = [];
+        _currentPage = 1;
+        _lastPage = 1;
+      });
+    }
     try {
       final repo = ref.read(documentsRepositoryProvider);
-      final templates = await repo.fetchTemplates();
+      final result = await repo.fetchTemplates(
+        search: _searchQuery.isNotEmpty ? _searchQuery : null,
+        page: _currentPage,
+      );
       if (!mounted) return;
       setState(() {
-        _templates = templates;
+        _templates = reset
+            ? result.templates
+            : [..._templates, ...result.templates];
+        _currentPage = result.currentPage;
+        _lastPage = result.lastPage;
         _isLoading = false;
       });
     } catch (e) {
@@ -49,6 +97,28 @@ class _TemplatePickerScreenState extends ConsumerState<TemplatePickerScreen> {
         _error = 'تعذّر تحميل القوالب. حاول مرة أخرى.';
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoadingMore || _isLoading || _currentPage >= _lastPage) return;
+    setState(() => _isLoadingMore = true);
+    try {
+      final repo = ref.read(documentsRepositoryProvider);
+      final result = await repo.fetchTemplates(
+        search: _searchQuery.isNotEmpty ? _searchQuery : null,
+        page: _currentPage + 1,
+      );
+      if (!mounted) return;
+      setState(() {
+        _templates = [..._templates, ...result.templates];
+        _currentPage = result.currentPage;
+        _lastPage = result.lastPage;
+        _isLoadingMore = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoadingMore = false);
     }
   }
 
@@ -67,6 +137,7 @@ class _TemplatePickerScreenState extends ConsumerState<TemplatePickerScreen> {
       body: Column(
         children: [
           _buildAppBar(context),
+          _buildSearchBar(),
           Expanded(child: _buildBody()),
         ],
       ),
@@ -147,6 +218,52 @@ class _TemplatePickerScreenState extends ConsumerState<TemplatePickerScreen> {
     );
   }
 
+  // ── Search bar ─────────────────────────────────────────────────────
+
+  Widget _buildSearchBar() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Container(
+        height: 44,
+        decoration: BoxDecoration(
+          color: AppColors.surface2,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: TextField(
+          controller: _searchController,
+          onChanged: _onSearchChanged,
+          textInputAction: TextInputAction.search,
+          style: const TextStyle(fontSize: 13, color: AppColors.text),
+          decoration: InputDecoration(
+            hintText: 'ابحث عن قالب...',
+            hintStyle: const TextStyle(fontSize: 13, color: AppColors.text3),
+            prefixIcon:
+                const Icon(Icons.search, size: 20, color: AppColors.text3),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? GestureDetector(
+                    onTap: () {
+                      _searchController.clear();
+                      _onSearchChanged('');
+                    },
+                    child: const Icon(
+                      Icons.close,
+                      size: 18,
+                      color: AppColors.text3,
+                    ),
+                  )
+                : null,
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          ),
+        ),
+      ),
+    );
+  }
+
   // ── Body ───────────────────────────────────────────────────────────
 
   Widget _buildBody() {
@@ -170,7 +287,7 @@ class _TemplatePickerScreenState extends ConsumerState<TemplatePickerScreen> {
               ),
               const SizedBox(height: 16),
               OutlinedButton.icon(
-                onPressed: _loadTemplates,
+                onPressed: () => _loadTemplates(reset: true),
                 icon: const Icon(Icons.refresh, size: 18),
                 label: const Text('إعادة المحاولة'),
                 style: OutlinedButton.styleFrom(
@@ -186,20 +303,27 @@ class _TemplatePickerScreenState extends ConsumerState<TemplatePickerScreen> {
         ),
       );
     }
-    final templates = _templates ?? [];
-    if (templates.isEmpty) {
-      return const Center(
+    if (_templates.isEmpty) {
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(32),
+          padding: const EdgeInsets.all(32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.description_outlined,
-                  size: 48, color: AppColors.text3),
-              SizedBox(height: 12),
+              Icon(
+                _searchQuery.isNotEmpty
+                    ? Icons.search_off_outlined
+                    : Icons.description_outlined,
+                size: 48,
+                color: AppColors.text3,
+              ),
+              const SizedBox(height: 12),
               Text(
-                'لا توجد قوالب متاحة حالياً.',
-                style: TextStyle(color: AppColors.text2, fontSize: 14),
+                _searchQuery.isNotEmpty
+                    ? 'لا توجد نتائج لـ "$_searchQuery"'
+                    : 'لا توجد قوالب متاحة حالياً.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.text2, fontSize: 14),
               ),
             ],
           ),
@@ -208,15 +332,25 @@ class _TemplatePickerScreenState extends ConsumerState<TemplatePickerScreen> {
     }
     return RefreshIndicator(
       color: AppColors.primary,
-      onRefresh: _loadTemplates,
+      onRefresh: () => _loadTemplates(reset: true),
       child: ListView.builder(
+        controller: _scrollController,
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-        itemCount: templates.length,
-        itemBuilder: (context, index) =>
-            _TemplateCard(
-              template: templates[index],
-              onTap: () => _onTemplateTap(templates[index]),
-            ),
+        itemCount: _templates.length + (_isLoadingMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index == _templates.length) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: CircularProgressIndicator(),
+              ),
+            );
+          }
+          return _TemplateCard(
+            template: _templates[index],
+            onTap: () => _onTemplateTap(_templates[index]),
+          );
+        },
       ),
     );
   }
@@ -232,11 +366,11 @@ class _TemplateCard extends StatelessWidget {
   final VoidCallback onTap;
 
   IconData get _icon => switch (template.type) {
-    'purchase_request' => Icons.shopping_cart_outlined,
-    'leave_request' => Icons.beach_access_outlined,
-    'internal_memo' => Icons.mail_outlined,
-    _ => Icons.description_outlined,
-  };
+        'purchase_request' => Icons.shopping_cart_outlined,
+        'leave_request' => Icons.beach_access_outlined,
+        'internal_memo' => Icons.mail_outlined,
+        _ => Icons.description_outlined,
+      };
 
   @override
   Widget build(BuildContext context) {
