@@ -88,7 +88,7 @@ class _GeneratedDocumentFormScreenState
         _counters = counters;
         _isLoadingCounters = false;
         // Pre-fill export only when counter is already initialized.
-        if (counters.exportIsInitialized) {
+        if (counters.exportIsInitialized && counters.exportNextNumber != null) {
           _exportController.text = counters.exportNextNumber.toString();
         }
         // Pre-fill import if the server returned a suggested number.

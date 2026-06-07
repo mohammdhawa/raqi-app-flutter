@@ -20,14 +20,14 @@ enum DocumentListType {
 /// Suggested next counters returned by `GET /document-counters/next`.
 class DocumentCounters {
   const DocumentCounters({
-    required this.sectionId,
-    required this.exportNextNumber,
+    required this.departmentId,
+    this.exportNextNumber,
     required this.exportIsInitialized,
     this.importNextNumber,
   });
 
-  final int sectionId;
-  final int exportNextNumber;
+  final int departmentId;
+  final int? exportNextNumber;
   final bool exportIsInitialized;
   final int? importNextNumber;
 
@@ -35,8 +35,8 @@ class DocumentCounters {
     final exp = json['export'] as Map<String, dynamic>;
     final imp = json['import'] as Map<String, dynamic>?;
     return DocumentCounters(
-      sectionId: (json['section_id'] as num).toInt(),
-      exportNextNumber: (exp['next_number'] as num).toInt(),
+      departmentId: (json['department_id'] as num).toInt(),
+      exportNextNumber: (exp['next_number'] as num?)?.toInt(),
       exportIsInitialized: exp['is_initialized'] as bool,
       importNextNumber: (imp?['next_number'] as num?)?.toInt(),
     );
