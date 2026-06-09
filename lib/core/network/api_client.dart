@@ -126,17 +126,7 @@ class ApiClient {
       }
     }
 
-    // If no structured error code, try to match known backend messages.
-    ApiErrorCode resolvedCode = ApiErrorCode.fromString(errorCode);
-    if (resolvedCode == ApiErrorCode.unknown && errorCode == null) {
-      final lc = message.toLowerCase();
-      if (lc.contains('chief cannot act') ||
-          lc.contains('all managers have made their decisions')) {
-        resolvedCode = ApiErrorCode.chiefCannotActYet;
-      } else if (lc.contains('chief user already exists')) {
-        resolvedCode = ApiErrorCode.chiefAlreadyExists;
-      }
-    }
+    final ApiErrorCode resolvedCode = ApiErrorCode.fromString(errorCode);
 
     return ApiFailure(
       code: resolvedCode,

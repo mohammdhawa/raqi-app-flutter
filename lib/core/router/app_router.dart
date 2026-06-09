@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/about/about_screen.dart';
+import '../../features/attendance/presentation/screens/attendance_history_screen.dart';
+import '../../features/attendance/presentation/screens/attendance_screen.dart';
 import '../../features/auth/presentation/providers/auth_controller.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/documents/presentation/screens/create_document_screen.dart';
@@ -46,7 +48,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/',
-        builder: (_, __) => const DocumentsHomeScreen(),
+        builder: (_, __) => const _HomeScreen(),
         routes: [
           GoRoute(
             path: 'documents/new',
@@ -70,12 +72,38 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: 'about',
             builder: (_, __) => const AboutScreen(),
           ),
+          GoRoute(
+            path: 'attendance',
+            builder: (_, __) => const AttendanceScreen(),
+            routes: [
+              GoRoute(
+                path: 'history',
+                builder: (_, __) => const AttendanceHistoryScreen(),
+              ),
+            ],
+          ),
         ],
       ),
     ],
     errorBuilder: (_, __) => const _NotFoundScreen(),
   );
 });
+
+/// Picks the landing screen by role: employees (`attendance_check`-only
+/// accounts, no document workflows) land directly on the check-in/out
+/// screen; everyone else gets the regular documents home.
+class _HomeScreen extends ConsumerWidget {
+  const _HomeScreen();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    if (user != null && user.isEmployee) {
+      return const AttendanceScreen();
+    }
+    return const DocumentsHomeScreen();
+  }
+}
 
 class _AuthRouterNotifier extends ChangeNotifier {
   _AuthRouterNotifier(Ref ref) {

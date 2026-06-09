@@ -192,6 +192,13 @@ class _AppBarSection extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       const _NotificationHeaderBtn(),
+                      if (user != null && user.attendanceCheck) ...[
+                        const SizedBox(width: 8),
+                        _HeaderIconBtn(
+                          icon: Icons.fingerprint_rounded,
+                          onTap: () => context.push('/attendance'),
+                        ),
+                      ],
 
                       const Spacer(),
 

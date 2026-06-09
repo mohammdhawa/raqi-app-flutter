@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find / -path \"*connectivity_plus-*/lib/src/connectivity_plus.dart\" 2>/dev/null | head -3)",
+      "Read(//c//**)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://storage.googleapis.com/download.flutter.io/androidx/core/core/1.16.0/core-1.16.0.pom\" --max-time 20)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://storage.googleapis.com/download.flutter.io/androidx/core/core/1.13.0/core-1.13.0.pom\" --max-time 20)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://storage.googleapis.com/download.flutter.io/androidx/core/core/1.13.1/core-1.13.1.pom\" --max-time 20)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://storage.googleapis.com/download.flutter.io/androidx/activity/activity/1.9.0/activity-1.9.0.pom\" --max-time 20)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://storage.googleapis.com/download.flutter.io/\" --max-time 20)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://storage.googleapis.com/download.flutter.io/io/flutter/x86_64_release/1.0.0-9d6f23f3322146f29465b1b525597620a72fa44e/x86_64_release-1.0.0-9d6f23f3322146f29465b1b525597620a72fa44e.pom\" --max-time 20)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://repo1.maven.org/maven2/androidx/core/core/1.13.0/core-1.13.0.pom\" --max-time 20)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://dl.google.com/dl/android/maven2/androidx/core/core/1.13.0/core-1.13.0.pom\" --max-time 20)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://pub.dev/\" --max-time 20)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://repo1.maven.org/maven2/\" --max-time 20)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://storage.googleapis.com/flutter_infra_release/releases/releases_windows.json\" --max-time 20)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" -A \"Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\)\" \"https://storage.googleapis.com/download.flutter.io/androidx/activity/activity/1.9.0/activity-1.9.0.pom\" --max-time 20)",
+      "Bash(flutter --version)",
+      "Bash(flutter build *)"
+    ]
+  }
+}

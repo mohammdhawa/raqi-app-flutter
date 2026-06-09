@@ -42,9 +42,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } on ApiFailure catch (failure) {
       final emailFieldError = failure.firstErrorFor('email');
       setState(() {
-        _errorMessage =
-            emailFieldError ??
-            arabicMessageFor(failure.code, fallback: failure.message);
+        _errorMessage = emailFieldError ?? failure.message;
       });
     } catch (_) {
       setState(() {

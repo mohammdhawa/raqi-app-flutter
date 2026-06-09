@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/theme/app_theme.dart';
+import 'features/attendance/presentation/providers/attendance_sync_service.dart';
 import 'features/splash/splash_screen.dart'; // ← NEW
 
 /// Top-level background handler (must be a top-level function)
@@ -41,6 +42,15 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp> {
   void initState() {
     super.initState();
     _setupNotifications();
+    _setupAttendanceSync();
+  }
+
+  /// Pushes any attendance records queued offline on a previous run, then
+  /// keeps listening so reconnecting triggers a retry automatically.
+  void _setupAttendanceSync() {
+    final syncService = ref.read(attendanceSyncServiceProvider);
+    syncService.syncPending();
+    syncService.listenForConnectivity();
   }
 
   Future<void> _setupNotifications() async {
