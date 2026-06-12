@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -13,7 +14,12 @@ class PushNotificationService {
 
   final ApiClient _api;
   final _localNotifications = FlutterLocalNotificationsPlugin();
-  
+
+  final _documentTapController = StreamController<int>.broadcast();
+
+  /// Emits a document ID whenever the user taps a foreground notification banner.
+  Stream<int> get onDocumentTap => _documentTapController.stream;
+
   /// Called once after Firebase.initializeApp()
   Future<void> init() async {
     // Request permission (iOS + Android 13+)
@@ -24,6 +30,7 @@ class PushNotificationService {
     const iosSettings = DarwinInitializationSettings();
     await _localNotifications.initialize(
       const InitializationSettings(android: androidSettings, iOS: iosSettings),
+      onDidReceiveNotificationResponse: _onNotificationTap,
     );
 
     // Create Android notification channel
@@ -71,6 +78,8 @@ class PushNotificationService {
     final notification = message.notification;
     if (notification == null) return;
 
+    final documentId = message.data['document_id']?.toString();
+
     _localNotifications.show(
       notification.hashCode,
       notification.title,
@@ -84,7 +93,15 @@ class PushNotificationService {
         ),
         iOS: DarwinNotificationDetails(),
       ),
+      payload: documentId,
     );
+  }
+
+  void _onNotificationTap(NotificationResponse response) {
+    final docId = int.tryParse(response.payload ?? '');
+    if (docId != null) {
+      _documentTapController.add(docId);
+    }
   }
 }
 

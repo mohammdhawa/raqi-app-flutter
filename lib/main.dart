@@ -64,6 +64,11 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp> {
       pushService.showLocalNotification(message);
     });
 
+    // Foreground banner tap: navigate to document
+    pushService.onDocumentTap.listen((docId) {
+      _navigateFromNotification({'document_id': docId});
+    });
+
     // Background tap: navigate to document
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
       _navigateFromNotification(message.data);

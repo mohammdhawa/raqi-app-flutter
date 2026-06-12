@@ -94,6 +94,80 @@ class _DocumentDetailsScreenState
     extends ConsumerState<DocumentDetailsScreen> {
   int get documentId => widget.documentId;
 
+  // ── Delete ────────────────────────────────────────────────────────────────
+
+  bool _canDelete(Document? doc, dynamic user) {
+    if (doc == null || user == null) return false;
+    if (doc.status != DocumentStatus.pending) return false;
+    if (doc.creator.id != user.id) return false;
+    return doc.workflows.every((s) => s.status == WorkflowStepStatus.pending);
+  }
+
+  Future<void> _confirmAndDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'حذف المستند',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+        ),
+        content: const Text(
+          'هل تريد حذف هذا المستند؟ لا يمكن التراجع عن هذا الإجراء.',
+          style: TextStyle(fontSize: 13, color: AppColors.text2),
+        ),
+        actions: [
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.text2,
+              side: const BorderSide(color: AppColors.border),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppColors.rSm),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.rejected,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppColors.rSm),
+              ),
+              elevation: 0,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final controller = ref.read(documentDetailsProvider(documentId).notifier);
+    final success = await controller.delete();
+    if (!mounted) return;
+
+    if (success) {
+      _removeFromLists(documentId);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حذف الوثيقة بنجاح.')),
+      );
+      Navigator.maybePop(context);
+    } else {
+      _scheduleErrorSnack();
+    }
+  }
+
+  void _removeFromLists(int id) {
+    for (final type in DocumentListType.values) {
+      if (ref.exists(documentsListProvider(type))) {
+        ref.read(documentsListProvider(type).notifier).removeDocument(id);
+      }
+    }
+  }
+
   // ── Approve / Reject ─────────────────────────────────────────────────────
 
   Future<void> _approve(String? note) async {
@@ -165,6 +239,7 @@ class _DocumentDetailsScreenState
 
     final doc = state.document;
     final statusLabel = doc != null ? _statusLabel(doc.status) : '';
+    final canDelete = _canDelete(doc, user);
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -211,6 +286,26 @@ class _DocumentDetailsScreenState
               ),
           ],
         ),
+        actions: [
+          if (state.isDeleting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              ),
+            )
+          else if (canDelete)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.white),
+              tooltip: 'حذف المستند',
+              onPressed: _confirmAndDelete,
+            ),
+        ],
       ),
       body: _DetailsBody(
         state: state,

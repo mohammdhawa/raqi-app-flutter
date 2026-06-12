@@ -9,6 +9,7 @@ class DocumentDetailsState {
     this.document,
     this.isLoading = false,
     this.isActing = false,
+    this.isDeleting = false,
     this.error,
   });
 
@@ -17,12 +18,16 @@ class DocumentDetailsState {
 
   /// True while an approve/reject is in flight.
   final bool isActing;
+
+  /// True while a delete request is in flight.
+  final bool isDeleting;
   final ApiFailure? error;
 
   DocumentDetailsState copyWith({
     Document? document,
     bool? isLoading,
     bool? isActing,
+    bool? isDeleting,
     ApiFailure? error,
     bool clearError = false,
   }) =>
@@ -30,6 +35,7 @@ class DocumentDetailsState {
         document: document ?? this.document,
         isLoading: isLoading ?? this.isLoading,
         isActing: isActing ?? this.isActing,
+        isDeleting: isDeleting ?? this.isDeleting,
         error: clearError ? null : (error ?? this.error),
       );
 }
@@ -66,6 +72,24 @@ class DocumentDetailsController extends StateNotifier<DocumentDetailsState> {
   Future<Document?> reject({String? note}) async {
     final r = await _act(() => _repo.reject(documentId, note: note));
     return r;
+  }
+
+  /// Returns true on success, false on failure (error stored in state).
+  Future<bool> delete() async {
+    state = state.copyWith(isDeleting: true, clearError: true);
+    try {
+      await _repo.delete(documentId);
+      if (!mounted) return true;
+      state = state.copyWith(isDeleting: false);
+      return true;
+    } on Exception catch (e) {
+      if (!mounted) return false;
+      state = state.copyWith(
+        isDeleting: false,
+        error: e is ApiFailure ? e : null,
+      );
+      return false;
+    }
   }
 
   Future<Document?> _act(Future<Document> Function() action) async {

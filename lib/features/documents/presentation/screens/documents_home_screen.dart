@@ -11,6 +11,9 @@ import '../widgets/document_list_item.dart';
 import '../../../../shared/widgets/state_views.dart';
 import '../../../notifications/presentation/providers/notifications_controller.dart';
 
+// All filter values in display order.
+const _kStatusFilters = DocumentStatusFilter.values;
+
 class DocumentsHomeScreen extends ConsumerStatefulWidget {
   const DocumentsHomeScreen({super.key});
 
@@ -539,6 +542,12 @@ class _DocumentsTabState extends ConsumerState<_DocumentsTab>
     }
   }
 
+  void _onFilterChanged(DocumentStatusFilter filter) {
+    ref
+        .read(documentsListProvider(widget.type).notifier)
+        .setStatusFilter(filter);
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -546,6 +555,27 @@ class _DocumentsTabState extends ConsumerState<_DocumentsTab>
     final user = ref.watch(currentUserProvider);
     final controller = ref.read(documentsListProvider(widget.type).notifier);
 
+    return Column(
+      children: [
+        // ── Status filter chips ──────────────────────────────────────
+        _StatusFilterBar(
+          selected: state.statusFilter,
+          onChanged: _onFilterChanged,
+        ),
+
+        // ── List ─────────────────────────────────────────────────────
+        Expanded(
+          child: _buildList(state, user, controller),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildList(
+    DocumentsListState state,
+    dynamic user,
+    DocumentsListController controller,
+  ) {
     if (state.isRefreshing && state.documents.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -592,6 +622,65 @@ class _DocumentsTabState extends ConsumerState<_DocumentsTab>
             document: doc,
             currentUser: user,
             onTap: () => context.push('/documents/${doc.id}'),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  STATUS FILTER BAR
+// ═══════════════════════════════════════════════════════════════════════
+
+class _StatusFilterBar extends StatelessWidget {
+  const _StatusFilterBar({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final DocumentStatusFilter selected;
+  final ValueChanged<DocumentStatusFilter> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.bg,
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        itemCount: _kStatusFilters.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final filter = _kStatusFilters[i];
+          final isSelected = filter == selected;
+          return GestureDetector(
+            onTap: () => onChanged(filter),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? AppColors.primary
+                    : AppColors.surface,
+                borderRadius: BorderRadius.circular(AppColors.pill),
+                border: Border.all(
+                  color:
+                      isSelected ? AppColors.primary : AppColors.border,
+                ),
+              ),
+              child: Text(
+                filter.label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? Colors.white : AppColors.text2,
+                  fontFamily: 'Cairo',
+                ),
+              ),
+            ),
           );
         },
       ),

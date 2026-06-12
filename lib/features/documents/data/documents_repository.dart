@@ -17,6 +17,22 @@ enum DocumentListType {
   String get apiValue => name;
 }
 
+enum DocumentStatusFilter {
+  all,
+  pending,
+  approved,
+  rejected;
+
+  String? get apiValue => this == DocumentStatusFilter.all ? null : name;
+
+  String get label => switch (this) {
+    DocumentStatusFilter.all => 'الكل',
+    DocumentStatusFilter.pending => 'قيد الانتظار',
+    DocumentStatusFilter.approved => 'معتمد',
+    DocumentStatusFilter.rejected => 'مرفوض',
+  };
+}
+
 /// Suggested next counters returned by `GET /document-counters/next`.
 class DocumentCounters {
   const DocumentCounters({
@@ -73,16 +89,26 @@ class DocumentsRepository {
     }
   }
 
-  /// `GET /documents?type=inbox|sent&page=N`
+  /// `GET /documents?type=inbox|sent&page=N&status=pending|approved|rejected`
   Future<DocumentsPage> list({
     required DocumentListType type,
     int page = 1,
+    DocumentStatusFilter statusFilter = DocumentStatusFilter.all,
   }) async {
     final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
       '/documents',
-      queryParameters: {'type': type.apiValue, 'page': page},
+      queryParameters: {
+        'type': type.apiValue,
+        'page': page,
+        if (statusFilter.apiValue != null) 'status': statusFilter.apiValue,
+      },
     ));
     return DocumentsPage.fromJson(response.data!);
+  }
+
+  /// `DELETE /documents/{id}` — creator-only, only while fully pending.
+  Future<void> delete(int id) async {
+    await _run(() => _api.dio.delete('/documents/$id'));
   }
 
   /// `GET /documents/{id}`
