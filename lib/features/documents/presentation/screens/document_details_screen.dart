@@ -399,6 +399,10 @@ class _DetailsBodyState extends State<_DetailsBody> {
             const SizedBox(height: 12),
             _StampedPdfCard(document: doc),
           ],
+          if (doc.attachments.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _AttachmentsCard(attachments: doc.attachments),
+          ],
           const SizedBox(height: 16),
           _WorkflowCard(document: doc),
           const SizedBox(height: 16),
@@ -1154,6 +1158,176 @@ class _StampedPdfCard extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Attachments card
+// ---------------------------------------------------------------------------
+
+class _AttachmentsCard extends StatelessWidget {
+  const _AttachmentsCard({required this.attachments});
+  final List<DocumentAttachment> attachments;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionHeader(
+            icon: Icons.attach_file,
+            title: 'المرفقات (${attachments.length})',
+          ),
+          const SizedBox(height: 12),
+          for (var i = 0; i < attachments.length; i++) ...[
+            _AttachmentTile(attachment: attachments[i]),
+            if (i < attachments.length - 1) const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AttachmentTile extends ConsumerWidget {
+  const _AttachmentTile({required this.attachment});
+  final DocumentAttachment attachment;
+
+  String get _url =>
+      '${AppConstants.storageBase}/storage/${attachment.filePath}';
+
+  Future<void> _openPreview(BuildContext context, WidgetRef ref) async {
+    if (attachment.isPdf) {
+      final token = await ref.read(tokenStorageProvider).read();
+      if (!context.mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierColor: Colors.black87,
+        builder: (_) => _PdfPreviewDialog(
+          url: _url,
+          fileName: attachment.fileName,
+          token: token,
+        ),
+      );
+    } else if (attachment.isImage) {
+      await showDialog<void>(
+        context: context,
+        barrierColor: Colors.black87,
+        builder: (_) =>
+            _ImagePreviewDialog(url: _url, fileName: attachment.fileName),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('معاينة هذا النوع من الملفات غير مدعومة.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final canPreview = attachment.isPdf || attachment.isImage;
+    final ext = attachment.fileName.contains('.')
+        ? attachment.fileName.split('.').last.toUpperCase()
+        : 'FILE';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          // Type badge
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: attachment.isPdf
+                  ? AppColors.rejectedBg
+                  : AppColors.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            alignment: Alignment.center,
+            child: attachment.isImage
+                ? const Icon(Icons.image_outlined,
+                    color: AppColors.primary, size: 20)
+                : Text(
+                    ext,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: attachment.isPdf
+                          ? AppColors.rejected
+                          : AppColors.primary,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+          ),
+          const SizedBox(width: 12),
+          // Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  attachment.fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _formatSize(attachment.fileSize),
+                  style: const TextStyle(fontSize: 11, color: AppColors.text2),
+                ),
+              ],
+            ),
+          ),
+          // Preview (when supported)
+          if (canPreview)
+            GestureDetector(
+              onTap: () => _openPreview(context, ref),
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.visibility_outlined,
+                    color: AppColors.text2, size: 18),
+              ),
+            ),
+          _FileActionButtons(
+            url: _url,
+            fileName: attachment.fileName,
+            requiresAuth: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatSize(int? bytes) {
+    if (bytes == null) return '';
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
   }
 }
 

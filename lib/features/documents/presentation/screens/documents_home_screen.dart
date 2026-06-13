@@ -14,6 +14,30 @@ import '../../../notifications/presentation/providers/notifications_controller.d
 // All filter values in display order.
 const _kStatusFilters = DocumentStatusFilter.values;
 
+/// Visual metadata (icon + accent color) for each status filter chip.
+extension _StatusFilterStyle on DocumentStatusFilter {
+  IconData get icon => switch (this) {
+    DocumentStatusFilter.all => Icons.apps_rounded,
+    DocumentStatusFilter.pending => Icons.schedule_rounded,
+    DocumentStatusFilter.approved => Icons.check_circle_rounded,
+    DocumentStatusFilter.rejected => Icons.cancel_rounded,
+  };
+
+  Color get accent => switch (this) {
+    DocumentStatusFilter.all => AppColors.primary,
+    DocumentStatusFilter.pending => AppColors.pending,
+    DocumentStatusFilter.approved => AppColors.approved,
+    DocumentStatusFilter.rejected => AppColors.rejected,
+  };
+
+  Color get accentBg => switch (this) {
+    DocumentStatusFilter.all => AppColors.surface2,
+    DocumentStatusFilter.pending => AppColors.pendingBg,
+    DocumentStatusFilter.approved => AppColors.approvedBg,
+    DocumentStatusFilter.rejected => AppColors.rejectedBg,
+  };
+}
+
 class DocumentsHomeScreen extends ConsumerStatefulWidget {
   const DocumentsHomeScreen({super.key});
 
@@ -91,9 +115,6 @@ class _DocumentsHomeScreenState extends ConsumerState<DocumentsHomeScreen>
               sentCount: sentState.documents.length,
               onLogout: _confirmAndLogout,
             ),
-
-            // ── Search Row ───────────────────────────────────────────
-            const _SearchRow(),
 
             // ── Tab Content ──────────────────────────────────────────
             Expanded(
@@ -445,64 +466,6 @@ class _BadgeTabBar extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  SEARCH ROW
-// ═══════════════════════════════════════════════════════════════════════
-
-class _SearchRow extends StatelessWidget {
-  const _SearchRow();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: AppColors.bg,
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-      child: Row(
-        children: [
-          // Search field
-          Expanded(
-            child: Container(
-              height: 44,
-              decoration: BoxDecoration(
-                color: AppColors.surface2,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const TextField(
-                decoration: InputDecoration(
-                  hintText: 'بحث في المستندات...',
-                  hintStyle: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.text3,
-                  ),
-                  prefixIcon: Icon(
-                    Icons.search,
-                    color: AppColors.text3,
-                    size: 20,
-                  ),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Filter button
-          Container(
-            width: 40,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              border: Border.all(color: AppColors.border, width: 1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.tune, color: AppColors.text2, size: 20),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
 //  DOCUMENTS TAB (per-tab list)
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -646,39 +609,62 @@ class _StatusFilterBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: AppColors.bg,
-      height: 44,
+      height: 52,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         itemCount: _kStatusFilters.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (context, i) {
           final filter = _kStatusFilters[i];
           final isSelected = filter == selected;
+          final accent = filter.accent;
           return GestureDetector(
             onTap: () => onChanged(filter),
+            behavior: HitTestBehavior.opaque,
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
               padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: isSelected
-                    ? AppColors.primary
-                    : AppColors.surface,
-                borderRadius: BorderRadius.circular(AppColors.pill),
+                color: isSelected ? accent : filter.accentBg,
+                borderRadius: BorderRadius.circular(AppColors.rMd),
                 border: Border.all(
-                  color:
-                      isSelected ? AppColors.primary : AppColors.border,
+                  color: isSelected
+                      ? accent
+                      : accent.withValues(alpha: 0.20),
+                  width: 1,
                 ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: accent.withValues(alpha: 0.35),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : null,
               ),
-              child: Text(
-                filter.label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isSelected ? Colors.white : AppColors.text2,
-                  fontFamily: 'Cairo',
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    filter.icon,
+                    size: 16,
+                    color: isSelected ? Colors.white : accent,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    filter.label,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: isSelected ? Colors.white : accent,
+                      fontFamily: 'Cairo',
+                    ),
+                  ),
+                ],
               ),
             ),
           );

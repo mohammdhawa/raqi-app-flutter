@@ -127,6 +127,7 @@ class DocumentsRepository {
     required File file,
     required WorkflowMode workflowMode,
     required List<int> approverIds,
+    List<File> attachments = const [],
   }) async {
     final form = FormData.fromMap({
       'title': title,
@@ -138,6 +139,8 @@ class DocumentsRepository {
         file.path,
         filename: file.path.split(Platform.pathSeparator).last,
       ),
+      if (attachments.isNotEmpty)
+        'attachments[]': await _multipartFiles(attachments),
     });
 
     final response = await _run(() => _api.dio.post(
@@ -208,27 +211,96 @@ class DocumentsRepository {
     required List<int> approverIds,
     int? exportNumber,
     int? importNumber,
+    List<File> attachments = const [],
   }) async {
-    final response = await _run(() => _api.dio.post<Map<String, dynamic>>(
-      '/documents/generated',
-      data: {
-        'template_id': templateId,
-        'title': title,
-        if (description != null && description.isNotEmpty)
-          'description': description,
-        'field_values': fieldValues,
-        'workflow_mode': workflowMode.apiValue,
-        'approver_ids': approverIds,
-        if (exportNumber != null) 'export_number': exportNumber,
-        if (importNumber != null) 'import_number': importNumber,
-      },
-    ));
+    // No attachments → keep the plain JSON payload so the backend receives
+    // `field_values` with its native nested structure (unchanged behaviour).
+    // With attachments we must switch to multipart/form-data.
+    final Response<Map<String, dynamic>> response;
+    if (attachments.isEmpty) {
+      response = await _run(() => _api.dio.post<Map<String, dynamic>>(
+        '/documents/generated',
+        data: {
+          'template_id': templateId,
+          'title': title,
+          if (description != null && description.isNotEmpty)
+            'description': description,
+          'field_values': fieldValues,
+          'workflow_mode': workflowMode.apiValue,
+          'approver_ids': approverIds,
+          if (exportNumber != null) 'export_number': exportNumber,
+          if (importNumber != null) 'import_number': importNumber,
+        },
+      ));
+    } else {
+      final form = FormData();
+      form.fields
+        ..add(MapEntry('template_id', templateId.toString()))
+        ..add(MapEntry('title', title));
+      if (description != null && description.isNotEmpty) {
+        form.fields.add(MapEntry('description', description));
+      }
+      form.fields.add(MapEntry('workflow_mode', workflowMode.apiValue));
+      // Flatten nested field_values into PHP bracket notation with explicit
+      // indices (e.g. `field_values[items][0][1]`) so Laravel rebuilds the
+      // same structure the JSON path would have produced.
+      _flattenForm('field_values', fieldValues, form.fields);
+      for (final id in approverIds) {
+        form.fields.add(MapEntry('approver_ids[]', id.toString()));
+      }
+      if (exportNumber != null) {
+        form.fields.add(MapEntry('export_number', exportNumber.toString()));
+      }
+      if (importNumber != null) {
+        form.fields.add(MapEntry('import_number', importNumber.toString()));
+      }
+      for (final mf in await _multipartFiles(attachments)) {
+        form.files.add(MapEntry('attachments[]', mf));
+      }
+      response = await _run(() => _api.dio.post<Map<String, dynamic>>(
+        '/documents/generated',
+        data: form,
+        options: Options(contentType: 'multipart/form-data'),
+      ));
+    }
 
     final data = response.data;
     if (data == null) {
       throw Exception('Server returned null — status ${response.statusCode}');
     }
     return _parseDocumentEnvelope(data);
+  }
+
+  /// Builds [MultipartFile]s for each attachment, preserving the original
+  /// filename so the backend stores a sensible name.
+  Future<List<MultipartFile>> _multipartFiles(List<File> files) async {
+    return [
+      for (final f in files)
+        await MultipartFile.fromFile(
+          f.path,
+          filename: f.path.split(Platform.pathSeparator).last,
+        ),
+    ];
+  }
+
+  /// Recursively flattens [value] under [key] into multipart form fields
+  /// using PHP/Laravel bracket notation. Maps become `key[childKey]` and
+  /// lists become `key[index]`, with scalars emitted as the leaf. Null
+  /// values are emitted as empty strings to mirror the JSON payload shape.
+  void _flattenForm(
+    String key,
+    dynamic value,
+    List<MapEntry<String, String>> fields,
+  ) {
+    if (value is Map) {
+      value.forEach((k, v) => _flattenForm('$key[$k]', v, fields));
+    } else if (value is List) {
+      for (var i = 0; i < value.length; i++) {
+        _flattenForm('$key[$i]', value[i], fields);
+      }
+    } else {
+      fields.add(MapEntry(key, value?.toString() ?? ''));
+    }
   }
 
   /// `POST /documents/{id}/approve`

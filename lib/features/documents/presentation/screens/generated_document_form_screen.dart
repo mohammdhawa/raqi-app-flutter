@@ -12,6 +12,7 @@ import '../../domain/document.dart';
 import '../../domain/document_template.dart';
 import '../providers/documents_list_controller.dart';
 import '../widgets/approver_picker_sheet.dart';
+import '../widgets/attachments_field.dart';
 
 // ═══════════════════════════════════════════════════════════════════════
 //  GENERATED DOCUMENT FORM SCREEN
@@ -36,6 +37,7 @@ class _GeneratedDocumentFormScreenState
   final _importController = TextEditingController();
   WorkflowMode _mode = WorkflowMode.sequential;
   List<User> _approvers = [];
+  List<PickedAttachment> _attachments = [];
   bool _isSubmitting = false;
   bool _isLoadingCounters = false;
   DocumentCounters? _counters;
@@ -210,6 +212,17 @@ class _GeneratedDocumentFormScreenState
     }
   }
 
+  // ── Attachments picker ─────────────────────────────────────────────
+
+  Future<void> _pickAttachments() async {
+    final result = await pickAttachments(_attachments);
+    if (!mounted) return;
+    setState(() {
+      _attachments = result.attachments;
+      _formError = result.error;
+    });
+  }
+
   // ── Approver picker ────────────────────────────────────────────────
 
   Future<void> _pickApprovers() async {
@@ -294,6 +307,7 @@ class _GeneratedDocumentFormScreenState
         approverIds: _approvers.map((u) => u.id).toList(),
         exportNumber: exportNumber,
         importNumber: importNumber,
+        attachments: _attachments.map((a) => a.file).toList(),
       );
 
       for (final type in DocumentListType.values) {
@@ -466,6 +480,23 @@ class _GeneratedDocumentFormScreenState
                     ],
                     const SizedBox(height: 20),
                   ],
+
+                  // ── 4b. Attachments (optional) ──
+                  _SectionHeader(
+                    icon: Icons.attach_file,
+                    label: 'مرفقات إضافية (اختياري)',
+                  ),
+                  AttachmentsField(
+                    attachments: _attachments,
+                    onPick: _pickAttachments,
+                    onRemove: (i) =>
+                        setState(() => _attachments.removeAt(i)),
+                  ),
+                  const SizedBox(height: 6),
+                  const _HintText(
+                    'حتى 10 ملفات — PDF · DOC · DOCX · JPG · PNG · WEBP · XLSX · XLS — حد أقصى 20 ميجابايت',
+                  ),
+                  const SizedBox(height: 20),
 
                   // ── 5. Approval mode ──
                   _SectionHeader(
