@@ -94,6 +94,80 @@ class _DocumentDetailsScreenState
     extends ConsumerState<DocumentDetailsScreen> {
   int get documentId => widget.documentId;
 
+  // ── Delete ────────────────────────────────────────────────────────────────
+
+  bool _canDelete(Document? doc, dynamic user) {
+    if (doc == null || user == null) return false;
+    if (doc.status != DocumentStatus.pending) return false;
+    if (doc.creator.id != user.id) return false;
+    return doc.workflows.every((s) => s.status == WorkflowStepStatus.pending);
+  }
+
+  Future<void> _confirmAndDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'حذف المستند',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+        ),
+        content: const Text(
+          'هل تريد حذف هذا المستند؟ لا يمكن التراجع عن هذا الإجراء.',
+          style: TextStyle(fontSize: 13, color: AppColors.text2),
+        ),
+        actions: [
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.text2,
+              side: const BorderSide(color: AppColors.border),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppColors.rSm),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.rejected,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppColors.rSm),
+              ),
+              elevation: 0,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final controller = ref.read(documentDetailsProvider(documentId).notifier);
+    final success = await controller.delete();
+    if (!mounted) return;
+
+    if (success) {
+      _removeFromLists(documentId);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حذف الوثيقة بنجاح.')),
+      );
+      Navigator.maybePop(context);
+    } else {
+      _scheduleErrorSnack();
+    }
+  }
+
+  void _removeFromLists(int id) {
+    for (final type in DocumentListType.values) {
+      if (ref.exists(documentsListProvider(type))) {
+        ref.read(documentsListProvider(type).notifier).removeDocument(id);
+      }
+    }
+  }
+
   // ── Approve / Reject ─────────────────────────────────────────────────────
 
   Future<void> _approve(String? note) async {
@@ -165,6 +239,7 @@ class _DocumentDetailsScreenState
 
     final doc = state.document;
     final statusLabel = doc != null ? _statusLabel(doc.status) : '';
+    final canDelete = _canDelete(doc, user);
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -211,6 +286,26 @@ class _DocumentDetailsScreenState
               ),
           ],
         ),
+        actions: [
+          if (state.isDeleting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              ),
+            )
+          else if (canDelete)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.white),
+              tooltip: 'حذف المستند',
+              onPressed: _confirmAndDelete,
+            ),
+        ],
       ),
       body: _DetailsBody(
         state: state,
@@ -303,6 +398,10 @@ class _DetailsBodyState extends State<_DetailsBody> {
           if (doc.stampedFilePath != null) ...[
             const SizedBox(height: 12),
             _StampedPdfCard(document: doc),
+          ],
+          if (doc.attachments.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _AttachmentsCard(attachments: doc.attachments),
           ],
           const SizedBox(height: 16),
           _WorkflowCard(document: doc),
@@ -1063,6 +1162,176 @@ class _StampedPdfCard extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
+// Attachments card
+// ---------------------------------------------------------------------------
+
+class _AttachmentsCard extends StatelessWidget {
+  const _AttachmentsCard({required this.attachments});
+  final List<DocumentAttachment> attachments;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionHeader(
+            icon: Icons.attach_file,
+            title: 'المرفقات (${attachments.length})',
+          ),
+          const SizedBox(height: 12),
+          for (var i = 0; i < attachments.length; i++) ...[
+            _AttachmentTile(attachment: attachments[i]),
+            if (i < attachments.length - 1) const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AttachmentTile extends ConsumerWidget {
+  const _AttachmentTile({required this.attachment});
+  final DocumentAttachment attachment;
+
+  String get _url =>
+      '${AppConstants.storageBase}/storage/${attachment.filePath}';
+
+  Future<void> _openPreview(BuildContext context, WidgetRef ref) async {
+    if (attachment.isPdf) {
+      final token = await ref.read(tokenStorageProvider).read();
+      if (!context.mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierColor: Colors.black87,
+        builder: (_) => _PdfPreviewDialog(
+          url: _url,
+          fileName: attachment.fileName,
+          token: token,
+        ),
+      );
+    } else if (attachment.isImage) {
+      await showDialog<void>(
+        context: context,
+        barrierColor: Colors.black87,
+        builder: (_) =>
+            _ImagePreviewDialog(url: _url, fileName: attachment.fileName),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('معاينة هذا النوع من الملفات غير مدعومة.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final canPreview = attachment.isPdf || attachment.isImage;
+    final ext = attachment.fileName.contains('.')
+        ? attachment.fileName.split('.').last.toUpperCase()
+        : 'FILE';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          // Type badge
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: attachment.isPdf
+                  ? AppColors.rejectedBg
+                  : AppColors.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            alignment: Alignment.center,
+            child: attachment.isImage
+                ? const Icon(Icons.image_outlined,
+                    color: AppColors.primary, size: 20)
+                : Text(
+                    ext,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: attachment.isPdf
+                          ? AppColors.rejected
+                          : AppColors.primary,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+          ),
+          const SizedBox(width: 12),
+          // Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  attachment.fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _formatSize(attachment.fileSize),
+                  style: const TextStyle(fontSize: 11, color: AppColors.text2),
+                ),
+              ],
+            ),
+          ),
+          // Preview (when supported)
+          if (canPreview)
+            GestureDetector(
+              onTap: () => _openPreview(context, ref),
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.visibility_outlined,
+                    color: AppColors.text2, size: 18),
+              ),
+            ),
+          _FileActionButtons(
+            url: _url,
+            fileName: attachment.fileName,
+            requiresAuth: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatSize(int? bytes) {
+    if (bytes == null) return '';
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Workflow card
 // ---------------------------------------------------------------------------
 
@@ -1363,6 +1632,17 @@ class _FileActionButtonsState extends ConsumerState<_FileActionButtons> {
 
   bool get _busy => _isDownloading || _isSharing;
 
+  /// Reduces a server-supplied filename to a safe basename so it can't escape
+  /// the temp directory via path separators or `..` segments.
+  String _safeFileName(String name) {
+    // Take the last segment after any kind of slash, drop traversal/control
+    // characters, and fall back to a generic name if nothing usable remains.
+    final base = name.split(RegExp(r'[/\\]')).last;
+    final cleaned = base.replaceAll(RegExp(r'[^A-Za-z0-9._؀-ۿ -]'), '_');
+    final stripped = cleaned.replaceAll(RegExp(r'^\.+'), '').trim();
+    return stripped.isEmpty ? 'download' : stripped;
+  }
+
   Future<String?> _fetchToTemp() async {
     String? token;
     if (widget.requiresAuth) {
@@ -1370,7 +1650,7 @@ class _FileActionButtonsState extends ConsumerState<_FileActionButtons> {
     }
     try {
       final dir = await getTemporaryDirectory();
-      final filePath = '${dir.path}/${widget.fileName}';
+      final filePath = '${dir.path}/${_safeFileName(widget.fileName)}';
       await Dio().download(
         widget.url,
         filePath,

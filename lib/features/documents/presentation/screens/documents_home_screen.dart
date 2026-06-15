@@ -11,6 +11,33 @@ import '../widgets/document_list_item.dart';
 import '../../../../shared/widgets/state_views.dart';
 import '../../../notifications/presentation/providers/notifications_controller.dart';
 
+// All filter values in display order.
+const _kStatusFilters = DocumentStatusFilter.values;
+
+/// Visual metadata (icon + accent color) for each status filter chip.
+extension _StatusFilterStyle on DocumentStatusFilter {
+  IconData get icon => switch (this) {
+    DocumentStatusFilter.all => Icons.apps_rounded,
+    DocumentStatusFilter.pending => Icons.schedule_rounded,
+    DocumentStatusFilter.approved => Icons.check_circle_rounded,
+    DocumentStatusFilter.rejected => Icons.cancel_rounded,
+  };
+
+  Color get accent => switch (this) {
+    DocumentStatusFilter.all => AppColors.primary,
+    DocumentStatusFilter.pending => AppColors.pending,
+    DocumentStatusFilter.approved => AppColors.approved,
+    DocumentStatusFilter.rejected => AppColors.rejected,
+  };
+
+  Color get accentBg => switch (this) {
+    DocumentStatusFilter.all => AppColors.surface2,
+    DocumentStatusFilter.pending => AppColors.pendingBg,
+    DocumentStatusFilter.approved => AppColors.approvedBg,
+    DocumentStatusFilter.rejected => AppColors.rejectedBg,
+  };
+}
+
 class DocumentsHomeScreen extends ConsumerStatefulWidget {
   const DocumentsHomeScreen({super.key});
 
@@ -88,9 +115,6 @@ class _DocumentsHomeScreenState extends ConsumerState<DocumentsHomeScreen>
               sentCount: sentState.documents.length,
               onLogout: _confirmAndLogout,
             ),
-
-            // ── Search Row ───────────────────────────────────────────
-            const _SearchRow(),
 
             // ── Tab Content ──────────────────────────────────────────
             Expanded(
@@ -192,6 +216,13 @@ class _AppBarSection extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       const _NotificationHeaderBtn(),
+                      if (user != null && user.attendanceCheck) ...[
+                        const SizedBox(width: 8),
+                        _HeaderIconBtn(
+                          icon: Icons.fingerprint_rounded,
+                          onTap: () => context.push('/attendance'),
+                        ),
+                      ],
 
                       const Spacer(),
 
@@ -435,64 +466,6 @@ class _BadgeTabBar extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  SEARCH ROW
-// ═══════════════════════════════════════════════════════════════════════
-
-class _SearchRow extends StatelessWidget {
-  const _SearchRow();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: AppColors.bg,
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-      child: Row(
-        children: [
-          // Search field
-          Expanded(
-            child: Container(
-              height: 44,
-              decoration: BoxDecoration(
-                color: AppColors.surface2,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const TextField(
-                decoration: InputDecoration(
-                  hintText: 'بحث في المستندات...',
-                  hintStyle: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.text3,
-                  ),
-                  prefixIcon: Icon(
-                    Icons.search,
-                    color: AppColors.text3,
-                    size: 20,
-                  ),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Filter button
-          Container(
-            width: 40,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              border: Border.all(color: AppColors.border, width: 1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.tune, color: AppColors.text2, size: 20),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
 //  DOCUMENTS TAB (per-tab list)
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -532,6 +505,12 @@ class _DocumentsTabState extends ConsumerState<_DocumentsTab>
     }
   }
 
+  void _onFilterChanged(DocumentStatusFilter filter) {
+    ref
+        .read(documentsListProvider(widget.type).notifier)
+        .setStatusFilter(filter);
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -539,6 +518,27 @@ class _DocumentsTabState extends ConsumerState<_DocumentsTab>
     final user = ref.watch(currentUserProvider);
     final controller = ref.read(documentsListProvider(widget.type).notifier);
 
+    return Column(
+      children: [
+        // ── Status filter chips ──────────────────────────────────────
+        _StatusFilterBar(
+          selected: state.statusFilter,
+          onChanged: _onFilterChanged,
+        ),
+
+        // ── List ─────────────────────────────────────────────────────
+        Expanded(
+          child: _buildList(state, user, controller),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildList(
+    DocumentsListState state,
+    dynamic user,
+    DocumentsListController controller,
+  ) {
     if (state.isRefreshing && state.documents.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -585,6 +585,88 @@ class _DocumentsTabState extends ConsumerState<_DocumentsTab>
             document: doc,
             currentUser: user,
             onTap: () => context.push('/documents/${doc.id}'),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  STATUS FILTER BAR
+// ═══════════════════════════════════════════════════════════════════════
+
+class _StatusFilterBar extends StatelessWidget {
+  const _StatusFilterBar({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final DocumentStatusFilter selected;
+  final ValueChanged<DocumentStatusFilter> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.bg,
+      height: 52,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        itemCount: _kStatusFilters.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (context, i) {
+          final filter = _kStatusFilters[i];
+          final isSelected = filter == selected;
+          final accent = filter.accent;
+          return GestureDetector(
+            onTap: () => onChanged(filter),
+            behavior: HitTestBehavior.opaque,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected ? accent : filter.accentBg,
+                borderRadius: BorderRadius.circular(AppColors.rMd),
+                border: Border.all(
+                  color: isSelected
+                      ? accent
+                      : accent.withValues(alpha: 0.20),
+                  width: 1,
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: accent.withValues(alpha: 0.35),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    filter.icon,
+                    size: 16,
+                    color: isSelected ? Colors.white : accent,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    filter.label,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: isSelected ? Colors.white : accent,
+                      fontFamily: 'Cairo',
+                    ),
+                  ),
+                ],
+              ),
+            ),
           );
         },
       ),

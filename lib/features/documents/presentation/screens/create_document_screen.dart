@@ -13,6 +13,7 @@ import '../../data/documents_repository.dart';
 import '../../domain/document.dart';
 import '../providers/documents_list_controller.dart';
 import '../widgets/approver_picker_sheet.dart';
+import '../widgets/attachments_field.dart';
 import 'template_picker_screen.dart';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -35,6 +36,7 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
   File? _selectedFile;
   String? _selectedFileName;
   int? _selectedFileSize;
+  List<PickedAttachment> _attachments = [];
   List<User> _approvers = [];
   bool _isSubmitting = false;
   String? _formError;
@@ -76,6 +78,17 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
       _selectedFileName = picked.name;
       _selectedFileSize = picked.size;
       _formError = null;
+    });
+  }
+
+  // ── Attachments picker ─────────────────────────────────────────────
+
+  Future<void> _pickAttachments() async {
+    final result = await pickAttachments(_attachments);
+    if (!mounted) return;
+    setState(() {
+      _attachments = result.attachments;
+      _formError = result.error;
     });
   }
 
@@ -156,6 +169,7 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
         file: _selectedFile!,
         workflowMode: _mode,
         approverIds: _approvers.map((u) => u.id).toList(),
+        attachments: _attachments.map((a) => a.file).toList(),
       );
 
       for (final type in DocumentListType.values) {
@@ -285,6 +299,25 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
                   const SizedBox(height: 8),
                   const Text(
                     'الأنواع المدعومة: PDF · DOC · DOCX · JPG · PNG · WEBP — حد أقصى 20 ميجابايت',
+                    style: TextStyle(fontSize: 11, color: AppColors.text3),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // ── 3b. Attachments section (optional) ──
+                  _AlraqiSectionHeader(
+                    icon: Icons.attach_file,
+                    label: 'مرفقات إضافية (اختياري)',
+                  ),
+                  AttachmentsField(
+                    attachments: _attachments,
+                    onPick: _pickAttachments,
+                    onRemove: (i) =>
+                        setState(() => _attachments.removeAt(i)),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'حتى ملفين — PDF · DOC · DOCX · JPG · PNG · WEBP · XLSX · XLS — حد أقصى 20 ميجابايت للملف',
                     style: TextStyle(fontSize: 11, color: AppColors.text3),
                   ),
 

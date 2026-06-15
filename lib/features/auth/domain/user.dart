@@ -10,19 +10,30 @@ class User {
     this.sectionId,
     this.departmentName,
     this.sectionName,
+    this.attendanceCheck = false,
+    this.canViewAttendance = false,
   });
 
   final int id;
   final String name;
   final String? email;
-  final String? role; // 'admin', 'manager', or 'chief'
+  final String? role; // 'admin', 'manager', 'chief', or 'employee'
   final int? departmentId;
   final int? sectionId;
   final String? departmentName;
   final String? sectionName;
 
+  /// Whether this user is gated into the attendance check-in/out flow
+  /// (`attendance_check` on the backend — required for `/api/attendance/*`).
+  final bool attendanceCheck;
+
+  /// Whether this user may view attendance records (`can_view_attendance`).
+  /// Gates access to `GET /attendance/records` and the history screen.
+  final bool canViewAttendance;
+
   bool get isAdmin => role == 'admin';
   bool get isChief => role == 'chief';
+  bool get isEmployee => role == 'employee';
 
   factory User.empty() => const User(
     id: 0,
@@ -43,6 +54,8 @@ class User {
       sectionId: json['section_id'] as int?,
       departmentName: dept?['name'] as String?,
       sectionName: sect?['name'] as String?,
+      attendanceCheck: (json['attendance_check'] as bool?) ?? false,
+      canViewAttendance: (json['can_view_attendance'] as bool?) ?? false,
     );
   }
 
@@ -55,5 +68,7 @@ class User {
     'section_id': sectionId,
     if (departmentName != null) 'department': {'name': departmentName},
     if (sectionName != null) 'section': {'name': sectionName},
+    'attendance_check': attendanceCheck,
+    'can_view_attendance': canViewAttendance,
   };
 }

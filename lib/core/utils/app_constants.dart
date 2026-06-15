@@ -28,4 +28,22 @@ class AppConstants {
 
   // File upload limit per docs: 20 MB
   static const int maxUploadBytes = 20 * 1024 * 1024;
+
+  // ── Document attachments (optional supporting files) ──
+  /// Max number of attachment files per document.
+  static const int maxAttachments = 2;
+
+  /// Allowed attachment extensions — slightly broader than the main file
+  /// (adds xlsx/xls).
+  static const List<String> attachmentAllowedExtensions = [
+    'pdf',
+    'doc',
+    'docx',
+    'jpg',
+    'jpeg',
+    'png',
+    'webp',
+    'xlsx',
+    'xls',
+  ];
 }

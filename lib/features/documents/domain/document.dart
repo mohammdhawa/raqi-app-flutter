@@ -117,6 +117,59 @@ class DocumentLog {
   );
 }
 
+/// A file attached to a document alongside the main file. Returned in the
+/// `attachments` array on create/generate/details responses (empty if none).
+class DocumentAttachment {
+  const DocumentAttachment({
+    required this.id,
+    required this.documentId,
+    required this.filePath,
+    required this.fileName,
+    this.mimeType,
+    this.fileSize,
+    this.uploadedBy,
+    this.createdAt,
+    this.uploader,
+  });
+
+  final int id;
+  final int documentId;
+  final String filePath;
+  final String fileName;
+  final String? mimeType;
+  final int? fileSize;
+  final int? uploadedBy;
+  final DateTime? createdAt;
+  final User? uploader;
+
+  bool get isImage {
+    final mime = mimeType ?? '';
+    if (mime.isNotEmpty) return mime.startsWith('image/');
+    final ext = fileName.toLowerCase().split('.').last;
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
+  }
+
+  bool get isPdf {
+    if ((mimeType ?? '').isNotEmpty) return mimeType == 'application/pdf';
+    return fileName.toLowerCase().endsWith('.pdf');
+  }
+
+  factory DocumentAttachment.fromJson(Map<String, dynamic> json) =>
+      DocumentAttachment(
+        id: json['id'] as int,
+        documentId: (json['document_id'] as num).toInt(),
+        filePath: json['file_path'] as String,
+        fileName: json['file_name'] as String,
+        mimeType: json['mime_type'] as String?,
+        fileSize: (json['file_size'] as num?)?.toInt(),
+        uploadedBy: (json['uploaded_by'] as num?)?.toInt(),
+        createdAt: _parseDate(json['created_at']),
+        uploader: json['uploader'] != null
+            ? User.fromJson(json['uploader'] as Map<String, dynamic>)
+            : null,
+      );
+}
+
 /// A document plus its workflow + logs. Returned by both the list
 /// endpoint and the details endpoint (logs may be empty in lists).
 class Document {
@@ -141,6 +194,7 @@ class Document {
     this.sectionId,
     this.exportNumber,
     this.importNumber,
+    this.attachments = const [],
     this.nextPendingUsers = const [],
   });
 
@@ -179,6 +233,10 @@ class Document {
 
   /// رقم الوارد — incoming document number. Hide the row in UI if null.
   final int? importNumber;
+
+  /// Optional supporting files uploaded alongside the main document.
+  /// Empty when none were provided.
+  final List<DocumentAttachment> attachments;
 
   /// Only populated by the details endpoint. Tells us who needs to act
   /// next — for sequential mode this is one user, for parallel it can
@@ -228,6 +286,9 @@ class Document {
       sectionId: (json['section_id'] as num?)?.toInt(),
       exportNumber: (json['export_number'] as num?)?.toInt(),
       importNumber: (json['import_number'] as num?)?.toInt(),
+      attachments: ((json['attachments'] as List?) ?? [])
+          .map((e) => DocumentAttachment.fromJson(e as Map<String, dynamic>))
+          .toList(),
       creator: json['creator'] != null
           ? User.fromJson(json['creator'] as Map<String, dynamic>)
           : User.empty(),
@@ -261,6 +322,7 @@ class Document {
     sectionId: sectionId,
     exportNumber: exportNumber,
     importNumber: importNumber,
+    attachments: attachments,
     creator: creator,
     workflows: workflows,
     logs: logs,

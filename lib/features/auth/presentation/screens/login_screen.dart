@@ -42,9 +42,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } on ApiFailure catch (failure) {
       final emailFieldError = failure.firstErrorFor('email');
       setState(() {
-        _errorMessage =
-            emailFieldError ??
-            arabicMessageFor(failure.code, fallback: failure.message);
+        _errorMessage = emailFieldError ?? failure.message;
       });
     } catch (_) {
       setState(() {
@@ -233,7 +231,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             alignment: AlignmentDirectional.centerEnd,
                             child: TextButton(
                               onPressed: () {
-                                // TODO: navigate to forgot password
+                                _showForgotPasswordDialog(context);
                               },
                               style: TextButton.styleFrom(
                                 padding: EdgeInsets.zero,
@@ -347,6 +345,56 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           },
         ),
       ),
+    );
+  }
+
+  void _showForgotPasswordDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: const Text(
+              'نسيت كلمة المرور؟',
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF224167),
+              ),
+            ),
+            content: const Text(
+              'يرجى التواصل مع مدير القسم التقني محمد هوى على الرقم:\n'
+              '+963958244652',
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                height: 1.6,
+                color: Color(0xFF224167),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text(
+                  'حسناً',
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF224167),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
