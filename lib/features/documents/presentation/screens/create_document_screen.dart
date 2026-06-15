@@ -317,7 +317,7 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'حتى 10 ملفات — PDF · DOC · DOCX · JPG · PNG · WEBP · XLSX · XLS — حد أقصى 20 ميجابايت للملف',
+                    'حتى ملفين — PDF · DOC · DOCX · JPG · PNG · WEBP · XLSX · XLS — حد أقصى 20 ميجابايت للملف',
                     style: TextStyle(fontSize: 11, color: AppColors.text3),
                   ),
 

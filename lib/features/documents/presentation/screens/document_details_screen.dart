@@ -1632,6 +1632,17 @@ class _FileActionButtonsState extends ConsumerState<_FileActionButtons> {
 
   bool get _busy => _isDownloading || _isSharing;
 
+  /// Reduces a server-supplied filename to a safe basename so it can't escape
+  /// the temp directory via path separators or `..` segments.
+  String _safeFileName(String name) {
+    // Take the last segment after any kind of slash, drop traversal/control
+    // characters, and fall back to a generic name if nothing usable remains.
+    final base = name.split(RegExp(r'[/\\]')).last;
+    final cleaned = base.replaceAll(RegExp(r'[^A-Za-z0-9._؀-ۿ -]'), '_');
+    final stripped = cleaned.replaceAll(RegExp(r'^\.+'), '').trim();
+    return stripped.isEmpty ? 'download' : stripped;
+  }
+
   Future<String?> _fetchToTemp() async {
     String? token;
     if (widget.requiresAuth) {
@@ -1639,7 +1650,7 @@ class _FileActionButtonsState extends ConsumerState<_FileActionButtons> {
     }
     try {
       final dir = await getTemporaryDirectory();
-      final filePath = '${dir.path}/${widget.fileName}';
+      final filePath = '${dir.path}/${_safeFileName(widget.fileName)}';
       await Dio().download(
         widget.url,
         filePath,

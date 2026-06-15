@@ -149,10 +149,12 @@ class DocumentsRepository {
       options: Options(contentType: 'multipart/form-data'),
     ));
 
-    debugPrint('=== CREATE RESPONSE ===');
-    debugPrint('Status: ${response.statusCode}');
-    debugPrint('Data type: ${response.data.runtimeType}');
-    debugPrint('Data: ${response.data}');
+    if (kDebugMode) {
+      debugPrint('=== CREATE RESPONSE ===');
+      debugPrint('Status: ${response.statusCode}');
+      debugPrint('Data type: ${response.data.runtimeType}');
+      debugPrint('Data: ${response.data}');
+    }
 
     final data = response.data;
 

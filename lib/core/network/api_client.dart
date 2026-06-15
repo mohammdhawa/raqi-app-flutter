@@ -44,10 +44,12 @@ class ApiClient {
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           final token = await _tokenStorage.read();
-          debugPrint(
-            'REQUEST ${options.method} ${options.path} - token: '
-            '${token == null ? "NULL" : "present (${token.length} chars)"}',
-          );
+          if (kDebugMode) {
+            debugPrint(
+              'REQUEST ${options.method} ${options.path} - token: '
+              '${token == null ? "NULL" : "present (${token.length} chars)"}',
+            );
+          }
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }

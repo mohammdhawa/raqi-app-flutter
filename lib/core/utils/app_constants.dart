@@ -31,7 +31,7 @@ class AppConstants {
 
   // ── Document attachments (optional supporting files) ──
   /// Max number of attachment files per document.
-  static const int maxAttachments = 10;
+  static const int maxAttachments = 2;
 
   /// Allowed attachment extensions — slightly broader than the main file
   /// (adds xlsx/xls).

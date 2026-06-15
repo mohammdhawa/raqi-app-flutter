@@ -49,7 +49,7 @@ class PushNotificationService {
     await FirebaseMessaging.instance.deleteToken();
     final token = await FirebaseMessaging.instance.getToken();
     if (token == null) return;
-    debugPrint('FCM token: $token');
+    if (kDebugMode) debugPrint('FCM token: $token');
     try {
       await _api.dio.post('/device-tokens', data: {'token': token});
     } catch (e) {
