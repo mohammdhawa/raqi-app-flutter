@@ -15,17 +15,23 @@ class AttendanceLocalDb {
 
   Database? _db;
 
-  Future<Database> _open() async {
+  /// [claimUserId] is only used the first time the database is opened after
+  /// the per-user-scoping migration: pre-migration rows have no real owner,
+  /// so they're attributed to whichever user happens to open the app first.
+  /// That's correct for the common one-account-per-device case, and no
+  /// leakier than the unscoped table they're migrating from.
+  Future<Database> _open(int claimUserId) async {
     final existing = _db;
     if (existing != null) return existing;
 
     final dbPath = await getDatabasesPath();
     final db = await openDatabase(
       '$dbPath/attendance_queue.db',
-      version: 1,
+      version: 3,
       onCreate: (db, version) => db.execute('''
         CREATE TABLE $_table (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
           type TEXT NOT NULL,
           latitude REAL NOT NULL,
           longitude REAL NOT NULL,
@@ -35,33 +41,61 @@ class AttendanceLocalDb {
           error_message TEXT
         )
       '''),
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+            'ALTER TABLE $_table ADD COLUMN user_id INTEGER NOT NULL DEFAULT -1',
+          );
+        }
+        if (oldVersion < 3) {
+          // Catches both rows just defaulted to -1 above (devices upgrading
+          // from v1) and rows stranded at -1 by an earlier build of this
+          // migration that didn't claim them (devices already on v2).
+          await db.update(
+            _table,
+            {'user_id': claimUserId},
+            where: 'user_id = ?',
+            whereArgs: [-1],
+          );
+        }
+      },
     );
     _db = db;
     return db;
   }
 
-  /// Inserts a freshly-captured record and returns it with its local id.
-  Future<PendingAttendanceRecord> insert(PendingAttendanceRecord record) async {
-    final db = await _open();
-    final id = await db.insert(_table, record.toMap());
+  /// Inserts a freshly-captured record (owned by [userId]) and returns it
+  /// with its local id.
+  Future<PendingAttendanceRecord> insert(
+    int userId,
+    PendingAttendanceRecord record,
+  ) async {
+    final db = await _open(userId);
+    final id = await db.insert(_table, {...record.toMap(), 'user_id': userId});
     return record.copyWith(id: id);
   }
 
-  /// All queued records, most recent first.
-  Future<List<PendingAttendanceRecord>> getAll() async {
-    final db = await _open();
-    final rows = await db.query(_table, orderBy: 'recorded_at DESC');
+  /// All queued records belonging to [userId], most recent first.
+  Future<List<PendingAttendanceRecord>> getAll(int userId) async {
+    final db = await _open(userId);
+    final rows = await db.query(
+      _table,
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'recorded_at DESC',
+    );
     return rows.map(PendingAttendanceRecord.fromMap).toList();
   }
 
-  /// Records that still need to reach the backend — `pending` plus
-  /// `failed` ones (so connectivity restoration retries them too).
-  Future<List<PendingAttendanceRecord>> getUnsynced() async {
-    final db = await _open();
+  /// [userId]'s records that still need to reach the backend — `pending`
+  /// plus `failed` ones (so connectivity restoration retries them too).
+  Future<List<PendingAttendanceRecord>> getUnsynced(int userId) async {
+    final db = await _open(userId);
     final rows = await db.query(
       _table,
-      where: 'status IN (?, ?)',
+      where: 'user_id = ? AND status IN (?, ?)',
       whereArgs: [
+        userId,
         AttendanceSyncStatus.pending.name,
         AttendanceSyncStatus.failed.name,
       ],
@@ -71,12 +105,13 @@ class AttendanceLocalDb {
   }
 
   Future<void> updateStatus(
-    int id, {
+    int id,
+    int userId, {
     required AttendanceSyncStatus status,
     String? errorMessage,
     bool clearError = false,
   }) async {
-    final db = await _open();
+    final db = await _open(userId);
     await db.update(
       _table,
       {

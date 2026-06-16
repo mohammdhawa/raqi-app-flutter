@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/errors/api_failure.dart';
+import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../data/attendance_local_db.dart';
 import '../../data/attendance_repository.dart';
 import 'attendance_queue_controller.dart';
@@ -30,10 +31,16 @@ class AttendanceSyncService {
 
   Future<void> syncPending() async {
     if (_isSyncing) return;
+    // Only sync the records owned by whoever is currently signed in —
+    // otherwise a previous user's queued check-ins/outs could be uploaded
+    // under this user's session.
+    final userId = _ref.read(currentUserProvider)?.id;
+    if (userId == null) return;
+
     _isSyncing = true;
     try {
       final db = _ref.read(attendanceLocalDbProvider);
-      final unsynced = await db.getUnsynced();
+      final unsynced = await db.getUnsynced(userId);
       if (unsynced.isEmpty) return;
 
       final repo = _ref.read(attendanceRepositoryProvider);
