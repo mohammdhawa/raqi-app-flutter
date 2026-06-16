@@ -9,6 +9,7 @@ import 'core/router/app_router.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/attendance/presentation/providers/attendance_sync_service.dart';
+import 'features/auth/presentation/providers/auth_controller.dart';
 import 'features/splash/splash_screen.dart'; // ← NEW
 
 /// Top-level background handler (must be a top-level function)
@@ -47,10 +48,16 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp> {
 
   /// Pushes any attendance records queued offline on a previous run, then
   /// keeps listening so reconnecting triggers a retry automatically.
+  ///
+  /// Session restoration is async, so `currentUserProvider` is still null
+  /// here — wait for auth to resolve (covers app startup) and re-run on
+  /// every future login too, so a previous run's queue isn't stranded.
   void _setupAttendanceSync() {
     final syncService = ref.read(attendanceSyncServiceProvider);
-    syncService.syncPending();
     syncService.listenForConnectivity();
+    ref.listenManual(authControllerProvider, (previous, next) {
+      if (next is AuthAuthenticated) syncService.syncPending();
+    });
   }
 
   Future<void> _setupNotifications() async {

@@ -8,7 +8,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/user.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../domain/attendance_record.dart';
-import '../../domain/pending_attendance_record.dart';
+import '../../domain/today_attendance_item.dart';
 import '../providers/attendance_controller.dart';
 import '../providers/attendance_queue_controller.dart';
 import '../widgets/sync_status_badge.dart';
@@ -85,7 +85,7 @@ class AttendanceScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     final status = ref.watch(attendanceStatusProvider);
     final controllerState = ref.watch(attendanceControllerProvider);
-    final todayRecords = ref.watch(todayAttendanceQueueProvider);
+    final todayRecords = ref.watch(todayAttendanceProvider);
     final pendingCount = ref.watch(pendingAttendanceCountProvider);
     final topPadding = MediaQuery.of(context).padding.top;
     final isHome = !context.canPop();
@@ -527,7 +527,7 @@ class _PendingBanner extends StatelessWidget {
 
 class _TodayRecordTile extends StatelessWidget {
   const _TodayRecordTile({required this.record});
-  final PendingAttendanceRecord record;
+  final TodayAttendanceItem record;
 
   @override
   Widget build(BuildContext context) {

@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../data/attendance_repository.dart';
 import '../../domain/attendance_record.dart';
 import '../../domain/pending_attendance_record.dart';
+import '../../domain/today_attendance_item.dart';
 import 'attendance_queue_controller.dart';
 import 'attendance_sync_service.dart';
 
@@ -16,6 +17,7 @@ class AttendanceControllerState {
     this.isBootstrapping = true,
     this.isCapturing = false,
     this.remoteLastRecord,
+    this.remoteTodayRecords = const [],
     this.captureError,
   });
 
@@ -30,6 +32,11 @@ class AttendanceControllerState {
   /// local queue to derive [attendanceStatusProvider].
   final AttendanceRecord? remoteLastRecord;
 
+  /// Today's records the server already knows about, from any device —
+  /// combined with the local queue's entries to drive
+  /// [todayAttendanceProvider].
+  final List<AttendanceRecord> remoteTodayRecords;
+
   /// Human-readable failure from the most recent capture attempt
   /// (permission denied, no GPS, camera cancelled, …).
   final String? captureError;
@@ -38,12 +45,14 @@ class AttendanceControllerState {
     bool? isBootstrapping,
     bool? isCapturing,
     AttendanceRecord? remoteLastRecord,
+    List<AttendanceRecord>? remoteTodayRecords,
     String? captureError,
     bool clearCaptureError = false,
   }) => AttendanceControllerState(
     isBootstrapping: isBootstrapping ?? this.isBootstrapping,
     isCapturing: isCapturing ?? this.isCapturing,
     remoteLastRecord: remoteLastRecord ?? this.remoteLastRecord,
+    remoteTodayRecords: remoteTodayRecords ?? this.remoteTodayRecords,
     captureError: clearCaptureError ? null : (captureError ?? this.captureError),
   );
 }
@@ -68,6 +77,7 @@ class AttendanceController extends StateNotifier<AttendanceControllerState> {
       state = state.copyWith(
         isBootstrapping: false,
         remoteLastRecord: page.records.isNotEmpty ? page.records.first : null,
+        remoteTodayRecords: page.records.where((r) => _isToday(r.recordedAt)).toList(),
       );
     } on Exception {
       // Offline on first launch — fine, the local queue (if any) still
@@ -194,4 +204,35 @@ final attendanceStatusProvider = Provider<AttendanceType?>((ref) {
   return latestLocal.recordedAt.isAfter(remote.recordedAt)
       ? latestLocal.type
       : remote.type;
+});
+
+bool _isToday(DateTime d) {
+  final now = DateTime.now();
+  return d.year == now.year && d.month == now.month && d.day == now.day;
+}
+
+/// "Today's records" (سجلات اليوم): the server's confirmed records for
+/// today — from any device — plus this device's local-queue entries for
+/// today, so a fresh check-in appears immediately instead of waiting for
+/// the next bootstrap. A local entry already represented in
+/// [AttendanceControllerState.remoteTodayRecords] (matched by type and
+/// recorded time) isn't duplicated.
+final todayAttendanceProvider = Provider<List<TodayAttendanceItem>>((ref) {
+  final remoteToday = ref.watch(attendanceControllerProvider).remoteTodayRecords;
+  final queue = ref.watch(attendanceQueueProvider);
+
+  final localToday = queue.where((r) => _isToday(r.recordedAt)).where((r) {
+    return !remoteToday.any(
+      (rt) =>
+          rt.type == r.type &&
+          rt.recordedAt.difference(r.recordedAt).abs() < const Duration(minutes: 2),
+    );
+  });
+
+  final items = [
+    ...remoteToday.map(TodayAttendanceItem.remote),
+    ...localToday.map(TodayAttendanceItem.local),
+  ];
+  items.sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
+  return items;
 });
