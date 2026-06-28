@@ -494,7 +494,7 @@ class _GeneratedDocumentFormScreenState
                   ),
                   const SizedBox(height: 6),
                   const _HintText(
-                    'حتى ملفين — PDF · DOC · DOCX · JPG · PNG · WEBP · XLSX · XLS — حد أقصى 20 ميجابايت',
+                    'حتى 10 ملفات — PDF · DOC · DOCX · JPG · PNG · WEBP · XLSX · XLS — حد أقصى 50 ميجابايت',
                   ),
                   const SizedBox(height: 20),
 

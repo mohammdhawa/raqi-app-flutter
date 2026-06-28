@@ -37,6 +37,8 @@ class AttendanceRecord {
     required this.createdAt,
     this.selfiePath,
     this.selfieUrl,
+    this.status,
+    this.workHours,
   });
 
   final int id;
@@ -55,6 +57,19 @@ class AttendanceRecord {
   /// every JSON representation of an [AttendanceRecord].
   final String? selfieUrl;
 
+  /// Server-persisted status. Only `missing_checkout` reaches the mobile
+  /// app — set on a CHECK-IN row when the employee never checked out and
+  /// the day was auto-closed at 22:00. `null` for a normal record.
+  final String? status;
+
+  /// Worked duration in decimal hours, stored on the CHECK-OUT row only —
+  /// `null` on check-ins (and on checkouts the server couldn't pair).
+  final double? workHours;
+
+  /// True on a check-in the employee forgot to close — the day is
+  /// incomplete and must NOT be shown as a full day worked.
+  bool get isMissingCheckout => status == 'missing_checkout';
+
   factory AttendanceRecord.fromJson(Map<String, dynamic> json) =>
       AttendanceRecord(
         id: (json['id'] as num).toInt(),
@@ -66,6 +81,8 @@ class AttendanceRecord {
         createdAt: _parseDate(json['created_at']) ?? DateTime.now(),
         selfiePath: json['selfie_path'] as String?,
         selfieUrl: json['selfie_url'] as String?,
+        status: json['status'] as String?,
+        workHours: _parseDouble(json['work_hours']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -78,7 +95,20 @@ class AttendanceRecord {
     'created_at': createdAt.toIso8601String(),
     'selfie_path': selfiePath,
     'selfie_url': selfieUrl,
+    'status': status,
+    'work_hours': workHours,
   };
+}
+
+/// Formats decimal [hours] (e.g. `8.5`) as a compact Arabic duration —
+/// `"8 س 30 د"` (8h 30m). Used to display a checkout row's `work_hours`.
+String formatWorkHours(double hours) {
+  final totalMinutes = (hours * 60).round();
+  final h = totalMinutes ~/ 60;
+  final m = totalMinutes % 60;
+  if (h <= 0) return '$m د';
+  if (m == 0) return '$h س';
+  return '$h س $m د';
 }
 
 /// A page of attendance records with pagination metadata
@@ -114,4 +144,10 @@ class AttendanceRecordsPage {
 DateTime? _parseDate(dynamic raw) {
   if (raw == null) return null;
   return DateTime.tryParse(raw.toString())?.toLocal();
+}
+
+double? _parseDouble(dynamic raw) {
+  if (raw == null) return null;
+  if (raw is num) return raw.toDouble();
+  return double.tryParse(raw.toString());
 }

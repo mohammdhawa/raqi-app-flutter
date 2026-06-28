@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../features/about/about_screen.dart';
 import '../../features/attendance/presentation/screens/attendance_history_screen.dart';
 import '../../features/attendance/presentation/screens/attendance_screen.dart';
+import '../../features/attendance/presentation/screens/leave_request_detail_screen.dart';
+import '../../features/attendance/presentation/screens/leave_request_form_screen.dart';
+import '../../features/attendance/presentation/screens/leave_screen.dart';
 import '../../features/auth/presentation/providers/auth_controller.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/documents/presentation/screens/create_document_screen.dart';
@@ -79,6 +82,32 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: 'history',
                 builder: (_, __) => const AttendanceHistoryScreen(),
+              ),
+              GoRoute(
+                path: 'leave',
+                builder: (context, state) {
+                  // Optional `{ 'tab': 1 }` extra selects the approvals tab.
+                  final extra = state.extra;
+                  final tab = extra is Map && extra['tab'] is int
+                      ? extra['tab'] as int
+                      : 0;
+                  return LeaveScreen(initialTab: tab);
+                },
+                routes: [
+                  GoRoute(
+                    path: 'new',
+                    builder: (_, __) => const LeaveRequestFormScreen(),
+                  ),
+                  GoRoute(
+                    path: 'requests/:id',
+                    builder: (context, state) {
+                      final id =
+                          int.tryParse(state.pathParameters['id'] ?? '');
+                      if (id == null) return const _NotFoundScreen();
+                      return LeaveRequestDetailScreen(leaveRequestId: id);
+                    },
+                  ),
+                ],
               ),
             ],
           ),

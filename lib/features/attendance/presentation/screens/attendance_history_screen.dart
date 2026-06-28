@@ -361,8 +361,13 @@ class _HistoryRecordTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isCheckIn = record.type == AttendanceType.checkIn;
-    final tint = isCheckIn ? AppColors.approved : AppColors.text2;
+    final tint = record.isMissingCheckout
+        ? AppColors.pending
+        : isCheckIn
+            ? AppColors.approved
+            : AppColors.text2;
     final selfieUrl = record.selfieUrl;
+    final workHours = record.workHours;
 
     return Container(
       padding: const EdgeInsets.all(10),
@@ -417,6 +422,14 @@ class _HistoryRecordTile extends StatelessWidget {
                     ),
                     const SizedBox(width: 6),
                     Text(record.type.arabicLabel, style: AppTheme.label()),
+                    if (record.isMissingCheckout) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        '· بدون انصراف',
+                        style: AppTheme.captionS(color: AppColors.pendingText)
+                            .copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -424,6 +437,14 @@ class _HistoryRecordTile extends StatelessWidget {
                   DateFormat('HH:mm').format(record.recordedAt),
                   style: AppTheme.captionS(color: AppColors.text2),
                 ),
+                // Worked hours are carried on the checkout row.
+                if (!isCheckIn && workHours != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'ساعات العمل: ${formatWorkHours(workHours)}',
+                    style: AppTheme.captionS(color: AppColors.text2),
+                  ),
+                ],
               ],
             ),
           ),

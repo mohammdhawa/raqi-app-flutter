@@ -203,7 +203,21 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     // Mark as read (optimistic).
     ref.read(notificationsListProvider.notifier).markAsRead(notification.id);
 
-    // Navigate based on type.
+    // A checkout reminder deep-links to the check-in/out screen so the user
+    // can record the انصراف they forgot.
+    if (notification.type == NotificationType.attendanceCheckoutReminder) {
+      if (mounted) context.push('/attendance');
+      return;
+    }
+
+    // Navigate based on the payload. A leave_request_id always wins so leave
+    // notifications open the relevant request regardless of `type`.
+    final leaveId = notification.leaveRequestId;
+    if (leaveId != null) {
+      if (mounted) context.push('/attendance/leave/requests/$leaveId');
+      return;
+    }
+
     final docId = notification.documentId;
     if (docId != null &&
         (notification.type == NotificationType.document ||
@@ -517,6 +531,16 @@ class _TypeIcon extends StatelessWidget {
           AppColors.pending,
           Icons.error_outline_rounded,
         ),
+      NotificationType.leave => (
+          AppColors.accentSoft,
+          AppColors.primary,
+          Icons.beach_access_outlined,
+        ),
+      NotificationType.attendanceCheckoutReminder => (
+          AppColors.pendingBg,
+          AppColors.pending,
+          Icons.logout_rounded,
+        ),
       NotificationType.general => (
           AppColors.surface2,
           AppColors.text2,
@@ -557,6 +581,16 @@ class _StatusChip extends StatelessWidget {
         ),
       NotificationType.document => (
           'قيد الانتظار',
+          AppColors.pendingText,
+          AppColors.pendingBg,
+        ),
+      NotificationType.leave => (
+          'إجازة',
+          AppColors.primary,
+          AppColors.accentSoft,
+        ),
+      NotificationType.attendanceCheckoutReminder => (
+          'تذكير انصراف',
           AppColors.pendingText,
           AppColors.pendingBg,
         ),
