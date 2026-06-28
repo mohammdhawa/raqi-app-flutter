@@ -218,11 +218,11 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       return;
     }
 
+    // Likewise, a document_id always wins regardless of `type` — document
+    // notifications can arrive as `general` (chip "وارد") yet still carry the
+    // id needed to open the document.
     final docId = notification.documentId;
-    if (docId != null &&
-        (notification.type == NotificationType.document ||
-            notification.type == NotificationType.approval ||
-            notification.type == NotificationType.rejection)) {
+    if (docId != null) {
       if (mounted) {
         context.push('/documents/$docId');
       }

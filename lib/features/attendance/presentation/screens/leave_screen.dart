@@ -227,10 +227,10 @@ class _FilterChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 52,
+      height: 56,
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         children: [
           for (final filter in LeaveStatusFilter.values) ...[
             _Chip(
@@ -259,24 +259,29 @@ class _Chip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : AppColors.surface,
-          borderRadius: BorderRadius.circular(AppColors.pill),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.border,
+    return Center(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primary : AppColors.surface,
+            borderRadius: BorderRadius.circular(AppColors.pill),
+            border: Border.all(
+              color: isSelected ? AppColors.primary : AppColors.border,
+            ),
           ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontFamily: 'Cairo',
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: isSelected ? Colors.white : AppColors.text2,
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              height: 1.2,
+            ).copyWith(
+              color: isSelected ? Colors.white : AppColors.text2,
+            ),
           ),
         ),
       ),
