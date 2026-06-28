@@ -36,9 +36,16 @@ class AppNotification {
 
   /// Extracts `document_id` from the `data` map when the notification
   /// type is [NotificationType.document] or [NotificationType.approval].
-  int? get documentId {
-    final raw = data['document_id'];
+  int? get documentId => _intFromData('document_id');
+
+  /// Extracts `leave_request_id` from the `data` map — present on leave
+  /// notifications so navigation can open the relevant request.
+  int? get leaveRequestId => _intFromData('leave_request_id');
+
+  int? _intFromData(String key) {
+    final raw = data[key];
     if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
     if (raw is String) return int.tryParse(raw);
     return null;
   }
@@ -74,6 +81,8 @@ enum NotificationType {
   document,
   approval,
   rejection,
+  leave,
+  attendanceCheckoutReminder,
   general;
 
   static NotificationType fromString(String? raw) {
@@ -84,6 +93,11 @@ enum NotificationType {
         return NotificationType.approval;
       case 'rejection':
         return NotificationType.rejection;
+      case 'leave':
+      case 'leave_request':
+        return NotificationType.leave;
+      case 'attendance_checkout_reminder':
+        return NotificationType.attendanceCheckoutReminder;
       case 'general':
         return NotificationType.general;
       default:

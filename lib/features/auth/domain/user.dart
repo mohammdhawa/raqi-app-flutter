@@ -35,6 +35,9 @@ class User {
   bool get isChief => role == 'chief';
   bool get isEmployee => role == 'employee';
 
+  /// Only managers may submit / approve leave requests.
+  bool get isManager => role == 'manager';
+
   factory User.empty() => const User(
     id: 0,
     name: '',

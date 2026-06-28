@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:convert';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -15,10 +15,14 @@ class PushNotificationService {
   final ApiClient _api;
   final _localNotifications = FlutterLocalNotificationsPlugin();
 
-  final _documentTapController = StreamController<int>.broadcast();
+  final _notificationTapController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
-  /// Emits a document ID whenever the user taps a foreground notification banner.
-  Stream<int> get onDocumentTap => _documentTapController.stream;
+  /// Emits the notification's `data` map whenever the user taps a foreground
+  /// notification banner — so callers can route on `document_id`,
+  /// `leave_request_id`, etc.
+  Stream<Map<String, dynamic>> get onNotificationTap =>
+      _notificationTapController.stream;
 
   /// Called once after Firebase.initializeApp()
   Future<void> init() async {
@@ -78,7 +82,9 @@ class PushNotificationService {
     final notification = message.notification;
     if (notification == null) return;
 
-    final documentId = message.data['document_id']?.toString();
+    // Carry the whole data map so the tap handler can route on whichever
+    // id it finds (document_id, leave_request_id, …).
+    final payload = jsonEncode(message.data);
 
     _localNotifications.show(
       notification.hashCode,
@@ -93,14 +99,24 @@ class PushNotificationService {
         ),
         iOS: DarwinNotificationDetails(),
       ),
-      payload: documentId,
+      payload: payload,
     );
   }
 
   void _onNotificationTap(NotificationResponse response) {
-    final docId = int.tryParse(response.payload ?? '');
-    if (docId != null) {
-      _documentTapController.add(docId);
+    final payload = response.payload;
+    if (payload == null || payload.isEmpty) return;
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is Map) {
+        _notificationTapController.add(decoded.cast<String, dynamic>());
+      }
+    } on FormatException {
+      // Legacy payloads were a bare document id string.
+      final docId = int.tryParse(payload);
+      if (docId != null) {
+        _notificationTapController.add({'document_id': docId});
+      }
     }
   }
 }

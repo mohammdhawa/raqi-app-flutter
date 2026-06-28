@@ -71,10 +71,8 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp> {
       pushService.showLocalNotification(message);
     });
 
-    // Foreground banner tap: navigate to document
-    pushService.onDocumentTap.listen((docId) {
-      _navigateFromNotification({'document_id': docId});
-    });
+    // Foreground banner tap: navigate using the carried data map.
+    pushService.onNotificationTap.listen(_navigateFromNotification);
 
     // Background tap: navigate to document
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
@@ -89,11 +87,35 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp> {
   }
 
   void _navigateFromNotification(Map<String, dynamic> data) {
-    final documentId = data['document_id'];
+    final router = ref.read(routerProvider);
+
+    // Checkout reminder ("type": "attendance_checkout_reminder") opens the
+    // check-in/out screen so the user can record the انصراف they forgot.
+    if (data['type'] == 'attendance_checkout_reminder') {
+      router.push('/attendance');
+      return;
+    }
+
+    // A leave_request_id takes precedence so leave notifications open the
+    // relevant request.
+    final leaveRequestId = _asId(data['leave_request_id']);
+    if (leaveRequestId != null) {
+      router.push('/attendance/leave/requests/$leaveRequestId');
+      return;
+    }
+
+    final documentId = _asId(data['document_id']);
     if (documentId != null) {
-      final router = ref.read(routerProvider);
       router.push('/documents/$documentId');
     }
+  }
+
+  /// Notification payloads stringify ids; accept int / num / String.
+  int? _asId(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse(raw.toString());
   }
 
   @override

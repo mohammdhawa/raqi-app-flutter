@@ -48,11 +48,11 @@ Future<AttachmentsPickResult> pickAttachments(
   for (final picked in result.files) {
     if (picked.path == null) continue;
     if (merged.length >= AppConstants.maxAttachments) {
-      error = 'يمكن إرفاق ملفين كحد أقصى.';
+      error = 'يمكن إرفاق 10 ملفات كحد أقصى.';
       break;
     }
     if (picked.size > AppConstants.maxUploadBytes) {
-      error = 'الملف "${picked.name}" يتجاوز الحد الأقصى (20 ميجابايت).';
+      error = 'الملف "${picked.name}" يتجاوز الحد الأقصى (50 ميجابايت).';
       continue;
     }
     merged.add(PickedAttachment(

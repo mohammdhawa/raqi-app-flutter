@@ -8,9 +8,13 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/user.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../domain/attendance_record.dart';
+import '../../domain/attendance_window.dart';
+import '../../domain/pending_attendance_record.dart';
 import '../../domain/today_attendance_item.dart';
 import '../providers/attendance_controller.dart';
 import '../providers/attendance_queue_controller.dart';
+import '../providers/leave_providers.dart';
+import '../widgets/leave_balance_card.dart';
 import '../widgets/sync_status_badge.dart';
 
 /// Check-in/out home: status card, the big context-aware action button,
@@ -80,8 +84,39 @@ class AttendanceScreen extends ConsumerWidget {
     }
   }
 
+  /// Pops a red snackbar whenever a queued record is newly rejected by the
+  /// server (business-rule 422 surfaced through the background sync), showing
+  /// the Arabic `error` exactly as returned. Detected by comparing the
+  /// previous and next queue snapshots, so each rejection alerts once.
+  void _listenForSyncRejections(BuildContext context, WidgetRef ref) {
+    ref.listen<List<PendingAttendanceRecord>>(attendanceQueueProvider, (
+      prev,
+      next,
+    ) {
+      final wasFailed = {
+        for (final r in prev ?? const <PendingAttendanceRecord>[])
+          if (r.id != null && r.isFailed) r.id,
+      };
+      for (final r in next) {
+        if (r.isFailed && r.id != null && !wasFailed.contains(r.id)) {
+          final message = r.errorMessage;
+          if (message == null || message.isEmpty) continue;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: AppColors.rejected,
+              duration: const Duration(seconds: 6),
+              content: Text(message),
+            ),
+          );
+        }
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    _listenForSyncRejections(context, ref);
+
     final user = ref.watch(currentUserProvider);
     final status = ref.watch(attendanceStatusProvider);
     final controllerState = ref.watch(attendanceControllerProvider);
@@ -90,6 +125,17 @@ class AttendanceScreen extends ConsumerWidget {
     final topPadding = MediaQuery.of(context).padding.top;
     final isHome = !context.canPop();
     final nextType = status?.opposite ?? AttendanceType.checkIn;
+
+    // Pre-disable check-in outside the working window / on a day off / when
+    // already on approved leave — the server still has the final say.
+    String? checkInBlocked;
+    if (nextType == AttendanceType.checkIn) {
+      checkInBlocked = checkInBlockedReason(DateTime.now());
+      if (checkInBlocked == null &&
+          ref.watch(approvedLeaveTodayProvider).valueOrNull != null) {
+        checkInBlocked = 'لديك إجازة معتمدة اليوم — لا حاجة لتسجيل الحضور.';
+      }
+    }
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -120,12 +166,30 @@ class AttendanceScreen extends ConsumerWidget {
                     _CheckInOutButton(
                       nextType: nextType,
                       isCapturing: controllerState.isCapturing,
+                      disabledReason: checkInBlocked,
                       onTap: () => _handleTap(context, ref, nextType),
                     ),
                     if (pendingCount > 0) ...[
                       const SizedBox(height: 14),
                       _PendingBanner(count: pendingCount),
                     ],
+
+                    // ── Leave management ──
+                    const SizedBox(height: 18),
+                    const _ApprovedLeaveBanner(),
+                    LeaveBalanceCard(
+                      onTap: () => context.push('/attendance/leave'),
+                    ),
+                    if (user?.isManager == true) ...[
+                      const SizedBox(height: 12),
+                      _LeaveActions(
+                        onRequest: () =>
+                            context.push('/attendance/leave/new'),
+                        onApprovals: () => context
+                            .push('/attendance/leave', extra: {'tab': 1}),
+                      ),
+                    ],
+
                     const SizedBox(height: 28),
                     Row(
                       children: [
@@ -387,22 +451,30 @@ class _CheckInOutButton extends StatelessWidget {
     required this.nextType,
     required this.isCapturing,
     required this.onTap,
+    this.disabledReason,
   });
 
   final AttendanceType nextType;
   final bool isCapturing;
   final VoidCallback onTap;
 
+  /// When non-null, the action is pre-blocked client-side: the button is
+  /// disabled and this Arabic reason is shown in place of the hint.
+  final String? disabledReason;
+
   @override
   Widget build(BuildContext context) {
     final isCheckIn = nextType == AttendanceType.checkIn;
     final label = isCheckIn ? 'تسجيل حضور' : 'تسجيل انصراف';
+    final isBlocked = disabledReason != null;
 
-    return Material(
+    return Opacity(
+      opacity: isBlocked ? 0.55 : 1,
+      child: Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(AppColors.r3xl),
       child: InkWell(
-        onTap: isCapturing ? null : onTap,
+        onTap: (isCapturing || isBlocked) ? null : onTap,
         borderRadius: BorderRadius.circular(AppColors.r3xl),
         child: Container(
           width: double.infinity,
@@ -469,7 +541,9 @@ class _CheckInOutButton extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'يلتقط موقعك وصورة شخصية ويسجلهما تلقائيًا',
+                      disabledReason ??
+                          'يلتقط موقعك وصورة شخصية ويسجلهما تلقائيًا',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.white.withValues(alpha: 0.72),
@@ -479,6 +553,7 @@ class _CheckInOutButton extends StatelessWidget {
                 ),
         ),
       ),
+    ),
     );
   }
 }
@@ -525,14 +600,20 @@ class _PendingBanner extends StatelessWidget {
 //  TODAY'S RECORDS
 // ═══════════════════════════════════════════════════════════════════════
 
-class _TodayRecordTile extends StatelessWidget {
+class _TodayRecordTile extends ConsumerWidget {
   const _TodayRecordTile({required this.record});
   final TodayAttendanceItem record;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isCheckIn = record.type == AttendanceType.checkIn;
-    final tint = isCheckIn ? AppColors.approved : AppColors.text2;
+    final isFailed = record.status == AttendanceSyncStatus.failed;
+    final tint = record.isMissingCheckout
+        ? AppColors.pending
+        : isCheckIn
+            ? AppColors.approved
+            : AppColors.text2;
+    final workHours = record.workHours;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -541,36 +622,129 @@ class _TodayRecordTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppColors.rLg),
         border: Border.all(color: AppColors.border),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: tint.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              isCheckIn ? Icons.login_rounded : Icons.logout_rounded,
-              color: tint,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(record.type.arabicLabel, style: AppTheme.label()),
-                const SizedBox(height: 2),
-                Text(
-                  DateFormat('HH:mm').format(record.recordedAt),
-                  style: AppTheme.captionS(color: AppColors.text2),
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: tint.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
                 ),
-              ],
+                child: Icon(
+                  isCheckIn ? Icons.login_rounded : Icons.logout_rounded,
+                  color: tint,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(record.type.arabicLabel, style: AppTheme.label()),
+                    const SizedBox(height: 2),
+                    Text(
+                      DateFormat('HH:mm').format(record.recordedAt),
+                      style: AppTheme.captionS(color: AppColors.text2),
+                    ),
+                    // Worked hours live on the checkout row.
+                    if (!isCheckIn && workHours != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'ساعات العمل: ${formatWorkHours(workHours)}',
+                        style: AppTheme.captionS(color: AppColors.text2),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (record.isMissingCheckout)
+                const _IncompleteDayChip()
+              else
+                SyncStatusBadge(status: record.status),
+            ],
+          ),
+
+          // A server-rejected queued entry: show why, with a dismiss action.
+          if (isFailed && record.errorMessage != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.rejectedBg,
+                borderRadius: BorderRadius.circular(AppColors.rMd),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: AppColors.rejected,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      record.errorMessage!,
+                      style: AppTheme.captionS(color: AppColors.rejectedText),
+                    ),
+                  ),
+                  if (record.localId != null)
+                    GestureDetector(
+                      onTap: () => ref
+                          .read(attendanceQueueProvider.notifier)
+                          .dismiss(record.localId!),
+                      child: const Padding(
+                        padding: EdgeInsets.only(right: 4, left: 2),
+                        child: Icon(
+                          Icons.close_rounded,
+                          color: AppColors.rejectedText,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Marks a check-in the employee never closed (server `missing_checkout`),
+/// so the day reads as incomplete rather than a full day worked.
+class _IncompleteDayChip extends StatelessWidget {
+  const _IncompleteDayChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.pendingBg,
+        borderRadius: BorderRadius.circular(AppColors.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.report_gmailerrorred_outlined,
+            color: AppColors.pendingText,
+            size: 14,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'بدون انصراف',
+            style: AppTheme.captionS(color: AppColors.pendingText).copyWith(
+              fontWeight: FontWeight.w600,
+              height: 1,
             ),
           ),
-          SyncStatusBadge(status: record.status),
         ],
       ),
     );
@@ -606,6 +780,105 @@ class _TodayEmptyState extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  LEAVE — approved-leave-today banner & manager actions
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Surfaces "إجازة معتمدة" when the user has an approved leave covering
+/// today. Renders nothing otherwise (or while loading / on error).
+class _ApprovedLeaveBanner extends ConsumerWidget {
+  const _ApprovedLeaveBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final leave = ref.watch(approvedLeaveTodayProvider).valueOrNull;
+    if (leave == null) return const SizedBox.shrink();
+
+    final df = DateFormat('yyyy/MM/dd');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.approvedBg,
+          borderRadius: BorderRadius.circular(AppColors.r2xl),
+          border: Border.all(color: AppColors.approved.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: const BoxDecoration(
+                color: AppColors.approved,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.beach_access_rounded,
+                  color: Colors.white, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('إجازة معتمدة', style: AppTheme.title()),
+                  const SizedBox(height: 2),
+                  Text(
+                    'أنت في إجازة معتمدة اليوم '
+                    '(${df.format(leave.startDate)} — ${df.format(leave.endDate)}).',
+                    style: AppTheme.bodyS(color: AppColors.approvedText),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Manager-only quick actions: submit a request and open the approvals tab.
+class _LeaveActions extends StatelessWidget {
+  const _LeaveActions({required this.onRequest, required this.onApprovals});
+
+  final VoidCallback onRequest;
+  final VoidCallback onApprovals;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: onRequest,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(46),
+            ),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('طلب إجازة'),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: onApprovals,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: const BorderSide(color: AppColors.primary, width: 1.5),
+              minimumSize: const Size.fromHeight(46),
+            ),
+            icon: const Icon(Icons.fact_check_outlined, size: 18),
+            label: const Text('طلبات للموافقة'),
+          ),
+        ),
+      ],
     );
   }
 }

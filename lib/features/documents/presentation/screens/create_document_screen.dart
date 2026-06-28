@@ -69,7 +69,7 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
     if (picked.path == null) return;
     if (picked.size > AppConstants.maxUploadBytes) {
       setState(() {
-        _formError = 'حجم الملف يتجاوز الحد الأقصى (20 ميجابايت).';
+        _formError = 'حجم الملف يتجاوز الحد الأقصى (50 ميجابايت).';
       });
       return;
     }
@@ -298,7 +298,7 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'الأنواع المدعومة: PDF · DOC · DOCX · JPG · PNG · WEBP — حد أقصى 20 ميجابايت',
+                    'الأنواع المدعومة: PDF · DOC · DOCX · JPG · PNG · WEBP — حد أقصى 50 ميجابايت',
                     style: TextStyle(fontSize: 11, color: AppColors.text3),
                   ),
 
@@ -317,7 +317,7 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'حتى ملفين — PDF · DOC · DOCX · JPG · PNG · WEBP · XLSX · XLS — حد أقصى 20 ميجابايت للملف',
+                    'حتى 10 ملفات — PDF · DOC · DOCX · JPG · PNG · WEBP · XLSX · XLS — حد أقصى 50 ميجابايت للملف',
                     style: TextStyle(fontSize: 11, color: AppColors.text3),
                   ),
 

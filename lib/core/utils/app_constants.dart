@@ -26,12 +26,12 @@ class AppConstants {
   static const String tokenKey = 'auth_token';
   static const String userKey = 'auth_user';
 
-  // File upload limit per docs: 20 MB
-  static const int maxUploadBytes = 20 * 1024 * 1024;
+  // File upload limit per docs: 50 MB
+  static const int maxUploadBytes = 50 * 1024 * 1024;
 
   // ── Document attachments (optional supporting files) ──
   /// Max number of attachment files per document.
-  static const int maxAttachments = 2;
+  static const int maxAttachments = 10;
 
   /// Allowed attachment extensions — slightly broader than the main file
   /// (adds xlsx/xls).

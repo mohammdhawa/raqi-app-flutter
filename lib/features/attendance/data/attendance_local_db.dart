@@ -87,18 +87,19 @@ class AttendanceLocalDb {
     return rows.map(PendingAttendanceRecord.fromMap).toList();
   }
 
-  /// [userId]'s records that still need to reach the backend — `pending`
-  /// plus `failed` ones (so connectivity restoration retries them too).
+  /// [userId]'s records that still need to reach the backend. Only
+  /// `pending` ones: a `failed` record was rejected by the server's
+  /// business rules (wrong day, outside window, duplicate, checkout
+  /// without check-in) — deterministic rejections that would just fail
+  /// again, so we never re-send them. They stay queued, surfaced to the
+  /// user, until dismissed. Transient network/server errors leave the
+  /// entry `pending`, so those still retry.
   Future<List<PendingAttendanceRecord>> getUnsynced(int userId) async {
     final db = await _open(userId);
     final rows = await db.query(
       _table,
-      where: 'user_id = ? AND status IN (?, ?)',
-      whereArgs: [
-        userId,
-        AttendanceSyncStatus.pending.name,
-        AttendanceSyncStatus.failed.name,
-      ],
+      where: 'user_id = ? AND status = ?',
+      whereArgs: [userId, AttendanceSyncStatus.pending.name],
       orderBy: 'recorded_at ASC',
     );
     return rows.map(PendingAttendanceRecord.fromMap).toList();
@@ -120,6 +121,17 @@ class AttendanceLocalDb {
       },
       where: 'id = ?',
       whereArgs: [id],
+    );
+  }
+
+  /// Permanently removes a queued record — used to dismiss a server-rejected
+  /// (failed) entry the user has acknowledged.
+  Future<void> delete(int id, int userId) async {
+    final db = await _open(userId);
+    await db.delete(
+      _table,
+      where: 'id = ? AND user_id = ?',
+      whereArgs: [id, userId],
     );
   }
 }

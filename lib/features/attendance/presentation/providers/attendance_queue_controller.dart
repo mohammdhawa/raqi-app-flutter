@@ -48,6 +48,16 @@ class AttendanceQueueController extends StateNotifier<List<PendingAttendanceReco
   Future<void> markFailed(int id, String error) =>
       _setStatus(id, AttendanceSyncStatus.failed, errorMessage: error);
 
+  /// Removes a queued record from SQLite and the in-memory list — used to
+  /// dismiss a server-rejected (failed) entry once the user has seen why.
+  Future<void> dismiss(int id) async {
+    final userId = _userId;
+    if (userId == null) return;
+    await _db.delete(id, userId);
+    if (!mounted) return;
+    state = [for (final r in state) if (r.id != id) r];
+  }
+
   Future<void> _setStatus(
     int id,
     AttendanceSyncStatus status, {
@@ -82,9 +92,10 @@ final attendanceQueueProvider =
   },
 );
 
-/// Records that haven't reached the server yet (`pending` or `failed`) —
-/// drives the pending-queue badge shown to the user.
+/// Records still waiting to reach the server (`pending`) — drives the
+/// "بانتظار المزامنة" banner. Excludes `failed` ones: those were rejected
+/// by the server and aren't retried, so they're surfaced separately.
 final pendingAttendanceCountProvider = Provider<int>((ref) {
   final queue = ref.watch(attendanceQueueProvider);
-  return queue.where((r) => r.isPending || r.isFailed).length;
+  return queue.where((r) => r.isPending).length;
 });
