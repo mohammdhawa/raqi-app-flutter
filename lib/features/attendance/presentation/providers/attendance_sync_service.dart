@@ -13,10 +13,14 @@ import 'attendance_queue_controller.dart';
 /// Pushes queued offline attendance records to the backend in the
 /// background and keeps the local queue's sync status in sync with it.
 ///
-/// Three triggers call [syncPending]:
+/// Sync attempts are triggered by:
 ///   1. App startup (see `_setupAttendanceSync` in main.dart)
 ///   2. Immediately after a new check-in/out is captured
 ///   3. Whenever connectivity is restored (see [listenForConnectivity])
+///   4. Returning to the foreground
+///
+/// Transient failures also schedule retries with bounded exponential backoff,
+/// because having Wi-Fi/mobile connectivity does not guarantee internet access.
 ///
 /// Each queued entry is processed independently by the backend, so a
 /// batch can partially succeed — we map `failed[].index` back to the
@@ -27,10 +31,29 @@ class AttendanceSyncService {
 
   final Ref _ref;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+  Timer? _retryTimer;
   bool _isSyncing = false;
+  bool _syncRequested = false;
+  int _consecutiveFailures = 0;
+
+  static const _retryDelays = <Duration>[
+    Duration(seconds: 15),
+    Duration(seconds: 30),
+    Duration(minutes: 1),
+    Duration(minutes: 2),
+    Duration(minutes: 5),
+  ];
 
   Future<void> syncPending() async {
-    if (_isSyncing) return;
+    // Preserve a trigger that arrives while an upload is in progress.
+    if (_isSyncing) {
+      _syncRequested = true;
+      return;
+    }
+
+    // A direct trigger makes an already scheduled retry redundant.
+    _retryTimer?.cancel();
+    _retryTimer = null;
     // Only sync the records owned by whoever is currently signed in —
     // otherwise a previous user's queued check-ins/outs could be uploaded
     // under this user's session.
@@ -41,7 +64,10 @@ class AttendanceSyncService {
     try {
       final db = _ref.read(attendanceLocalDbProvider);
       final unsynced = await db.getUnsynced(userId);
-      if (unsynced.isEmpty) return;
+      if (unsynced.isEmpty) {
+        _consecutiveFailures = 0;
+        return;
+      }
 
       final repo = _ref.read(attendanceRepositoryProvider);
       final queue = _ref.read(attendanceQueueProvider.notifier);
@@ -50,11 +76,13 @@ class AttendanceSyncService {
       try {
         result = await repo.sync(unsynced);
       } on ApiFailure catch (e) {
-        // No network / server error — leave entries as pending so the
-        // next trigger (connectivity restored, app restart) retries them.
+        // Leave transient network/server failures pending for a later retry.
         debugPrint('Attendance sync failed (will retry): ${e.message}');
+        if (_isTransient(e)) _scheduleRetry();
         return;
       }
+
+      _consecutiveFailures = 0;
 
       final failedByIndex = {for (final f in result.failed) f.index: f.error};
       for (var i = 0; i < unsynced.length; i++) {
@@ -69,7 +97,31 @@ class AttendanceSyncService {
       }
     } finally {
       _isSyncing = false;
+      if (_syncRequested) {
+        _syncRequested = false;
+        unawaited(syncPending());
+      }
     }
+  }
+
+  bool _isTransient(ApiFailure failure) {
+    final status = failure.statusCode;
+    return failure.code == ApiErrorCode.network ||
+        failure.code == ApiErrorCode.serverError ||
+        (status != null && status >= 500);
+  }
+
+  void _scheduleRetry() {
+    if (_retryTimer?.isActive ?? false) return;
+    final index = _consecutiveFailures
+        .clamp(0, _retryDelays.length - 1)
+        .toInt();
+    final delay = _retryDelays[index];
+    _consecutiveFailures++;
+    _retryTimer = Timer(delay, () {
+      _retryTimer = null;
+      unawaited(syncPending());
+    });
   }
 
   /// Starts listening for connectivity changes and triggers a sync
@@ -86,6 +138,8 @@ class AttendanceSyncService {
   void dispose() {
     _connectivitySub?.cancel();
     _connectivitySub = null;
+    _retryTimer?.cancel();
+    _retryTimer = null;
   }
 }
 

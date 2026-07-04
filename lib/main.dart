@@ -38,12 +38,27 @@ class DocApprovalApp extends ConsumerStatefulWidget {
   ConsumerState<DocApprovalApp> createState() => _DocApprovalAppState();
 }
 
-class _DocApprovalAppState extends ConsumerState<DocApprovalApp> {
+class _DocApprovalAppState extends ConsumerState<DocApprovalApp>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _setupNotifications();
     _setupAttendanceSync();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(attendanceSyncServiceProvider).syncPending();
+    }
   }
 
   /// Pushes any attendance records queued offline on a previous run, then
