@@ -1,6 +1,5 @@
 # Flutter / Dart
 .dart_tool/
-.dart-home/
 .packages
 .pub-cache/
 .pub/
@@ -25,6 +24,8 @@ android/.gradle/
 android/captures/
 android/local.properties
 android/key.properties
+*.jks
+*.keystore
 
 # iOS
 ios/Pods/

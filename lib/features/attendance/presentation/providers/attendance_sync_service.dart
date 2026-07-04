@@ -80,6 +80,13 @@ class AttendanceSyncService {
         debugPrint('Attendance sync failed (will retry): ${e.message}');
         if (_isTransient(e)) _scheduleRetry();
         return;
+      } catch (e) {
+        // Anything the repository doesn't map to ApiFailure (unwrapped Dio
+        // errors, response parse failures, unreadable selfie files) would
+        // otherwise strand records as pending with no retry scheduled.
+        debugPrint('Attendance sync failed unexpectedly (will retry): $e');
+        _scheduleRetry();
+        return;
       }
 
       _consecutiveFailures = 0;
