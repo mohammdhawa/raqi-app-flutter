@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/theme/app_theme.dart';
+import 'features/attendance/presentation/providers/attendance_controller.dart';
 import 'features/attendance/presentation/providers/attendance_sync_service.dart';
 import 'features/auth/presentation/providers/auth_controller.dart';
 import 'features/splash/splash_screen.dart'; // ← NEW
@@ -58,6 +59,13 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.read(attendanceSyncServiceProvider).syncPending();
+      // The calendar day may have changed while backgrounded — refetch
+      // today's records so yesterday's check-in can't drive this morning's
+      // status. Guarded by exists() to avoid eagerly creating the controller
+      // (and firing its API call) for users who never opened attendance.
+      if (ref.exists(attendanceControllerProvider)) {
+        ref.read(attendanceControllerProvider.notifier).refreshToday();
+      }
     }
   }
 
@@ -71,7 +79,12 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp>
     final syncService = ref.read(attendanceSyncServiceProvider);
     syncService.listenForConnectivity();
     ref.listenManual(authControllerProvider, (previous, next) {
-      if (next is AuthAuthenticated) syncService.syncPending();
+      if (next is AuthAuthenticated) {
+        syncService.syncPending();
+        // Reclaim selfie files orphaned by a mid-capture/mid-sync process
+        // kill — best-effort, off the critical path.
+        syncService.sweepOrphanedSelfies();
+      }
     });
   }
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
@@ -8,6 +9,8 @@ import '../../../../core/errors/api_failure.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../data/attendance_local_db.dart';
 import '../../data/attendance_repository.dart';
+import '../../data/selfie_storage.dart';
+import '../../domain/pending_attendance_record.dart';
 import 'attendance_queue_controller.dart';
 
 /// Pushes queued offline attendance records to the backend in the
@@ -72,13 +75,65 @@ class AttendanceSyncService {
       final repo = _ref.read(attendanceRepositoryProvider);
       final queue = _ref.read(attendanceQueueProvider.notifier);
 
+      // A record whose selfie file no longer exists (aggressive cache
+      // cleaners on MIUI etc.) can never upload — building its multipart
+      // part would throw before any network call, stranding the whole
+      // batch as pending forever. Partition those out FIRST and mark them
+      // failed (dismissible), so the remaining records still sync.
+      //
+      // Paths are resolved against the CURRENT app-support dir (see
+      // resolveSelfiePath) so an iOS container-UUID change on app update
+      // doesn't make every stored path look missing. Sendable entries carry
+      // the resolved absolute path so repo.sync and cleanup use it directly.
+      final missing = <PendingAttendanceRecord>[];
+      final sendable = <PendingAttendanceRecord>[];
+      for (final entry in unsynced) {
+        final absolutePath = await resolveSelfiePath(entry.selfiePath);
+        if (File(absolutePath).existsSync()) {
+          sendable.add(entry.copyWith(selfiePath: absolutePath));
+        } else {
+          missing.add(entry);
+        }
+      }
+
+      for (final entry in missing) {
+        if (entry.id == null) continue;
+        await queue.markFailed(
+          entry.id!,
+          'تعذّرت المزامنة: لم تعد صورة التسجيل متوفرة على الجهاز. '
+          'يرجى تسجيل الحضور مجدداً.',
+        );
+      }
+
+      if (sendable.isEmpty) {
+        // Nothing transient happened — don't POST an empty batch.
+        _consecutiveFailures = 0;
+        return;
+      }
+
       final AttendanceSyncResult result;
       try {
-        result = await repo.sync(unsynced);
+        result = await repo.sync(sendable);
       } on ApiFailure catch (e) {
-        // Leave transient network/server failures pending for a later retry.
-        debugPrint('Attendance sync failed (will retry): ${e.message}');
-        if (_isTransient(e)) _scheduleRetry();
+        debugPrint('Attendance sync failed: ${e.message}');
+        if (_isTransient(e)) {
+          // Network/5xx — leave pending and retry with backoff.
+          _scheduleRetry();
+        } else if (!_isRecoverable(e)) {
+          // A deterministic rejection of the whole request (e.g. 413 payload
+          // too large, 400/422) will fail identically on every retry and would
+          // otherwise wedge the queue forever with no retry and no dismissible
+          // tile. Surface the batch as dismissible failures instead. Auth
+          // failures are excluded (_isRecoverable) — those clear on re-login.
+          for (final entry in sendable) {
+            if (entry.id == null) continue;
+            await queue.markFailed(
+              entry.id!,
+              'تعذّرت المزامنة: رفض الخادم هذه السجلات. '
+              'يرجى المحاولة مجدداً أو حذفها.',
+            );
+          }
+        }
         return;
       } catch (e) {
         // Anything the repository doesn't map to ApiFailure (unwrapped Dio
@@ -91,15 +146,23 @@ class AttendanceSyncService {
 
       _consecutiveFailures = 0;
 
+      // The server's failed[].index points into the records[] we sent —
+      // i.e. positions in `sendable`, NOT `unsynced`. Mapping against the
+      // full list after filtering would shift indices and flip the wrong
+      // records to synced/failed.
       final failedByIndex = {for (final f in result.failed) f.index: f.error};
-      for (var i = 0; i < unsynced.length; i++) {
-        final entry = unsynced[i];
+      for (var i = 0; i < sendable.length; i++) {
+        final entry = sendable[i];
         if (entry.id == null) continue;
         final error = failedByIndex[i];
         if (error != null) {
           await queue.markFailed(entry.id!, error);
         } else {
           await queue.markSynced(entry.id!);
+          // getUnsynced only returns pending rows, so a synced record's
+          // selfie is never read again — reclaim the storage. entry.selfiePath
+          // is the resolved absolute path (set on the sendable copy above).
+          deleteSelfieQuietly(entry.selfiePath);
         }
       }
     } finally {
@@ -111,12 +174,34 @@ class AttendanceSyncService {
     }
   }
 
+  /// Deletes persisted selfies orphaned by a process kill between copy and
+  /// queue insert, or between a successful sync and its cleanup. Best-effort;
+  /// safe to call on startup. Scans across all users' rows so a shared device
+  /// never wipes another account's pending selfie.
+  Future<void> sweepOrphanedSelfies() async {
+    final userId = _ref.read(currentUserProvider)?.id;
+    if (userId == null) return;
+    try {
+      final db = _ref.read(attendanceLocalDbProvider);
+      final referenced = await db.referencedSelfieFileNames(userId);
+      await sweepOrphanedSelfieFiles(referenced);
+    } catch (_) {
+      // Best-effort — a failed sweep must never disrupt startup.
+    }
+  }
+
   bool _isTransient(ApiFailure failure) {
     final status = failure.statusCode;
     return failure.code == ApiErrorCode.network ||
         failure.code == ApiErrorCode.serverError ||
         (status != null && status >= 500);
   }
+
+  /// Auth failures clear on re-login, so their records must stay pending (not
+  /// be marked terminally failed) — the user-scoped sync will re-send them.
+  bool _isRecoverable(ApiFailure failure) =>
+      failure.code == ApiErrorCode.unauthenticated ||
+      failure.code == ApiErrorCode.forbidden;
 
   void _scheduleRetry() {
     if (_retryTimer?.isActive ?? false) return;

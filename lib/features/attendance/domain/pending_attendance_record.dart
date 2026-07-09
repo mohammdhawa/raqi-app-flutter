@@ -53,6 +53,7 @@ class PendingAttendanceRecord {
 
   PendingAttendanceRecord copyWith({
     int? id,
+    String? selfiePath,
     AttendanceSyncStatus? status,
     String? errorMessage,
     bool clearError = false,
@@ -61,7 +62,7 @@ class PendingAttendanceRecord {
     type: type,
     latitude: latitude,
     longitude: longitude,
-    selfiePath: selfiePath,
+    selfiePath: selfiePath ?? this.selfiePath,
     recordedAt: recordedAt,
     status: status ?? this.status,
     errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),

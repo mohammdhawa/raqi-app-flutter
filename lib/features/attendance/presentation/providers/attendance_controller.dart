@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../data/attendance_repository.dart';
+import '../../data/selfie_storage.dart';
 import '../../domain/attendance_record.dart';
 import '../../domain/pending_attendance_record.dart';
 import '../../domain/today_attendance_item.dart';
@@ -16,7 +17,6 @@ class AttendanceControllerState {
   const AttendanceControllerState({
     this.isBootstrapping = true,
     this.isCapturing = false,
-    this.remoteLastRecord,
     this.remoteTodayRecords = const [],
     this.captureError,
   });
@@ -28,13 +28,9 @@ class AttendanceControllerState {
   /// Whether a check-in/out capture (location + selfie) is in progress.
   final bool isCapturing;
 
-  /// The most recent record the server knows about — combined with the
-  /// local queue to derive [attendanceStatusProvider].
-  final AttendanceRecord? remoteLastRecord;
-
   /// Today's records the server already knows about, from any device —
   /// combined with the local queue's entries to drive
-  /// [todayAttendanceProvider].
+  /// [attendanceStatusProvider] and [todayAttendanceProvider].
   final List<AttendanceRecord> remoteTodayRecords;
 
   /// Human-readable failure from the most recent capture attempt
@@ -44,17 +40,17 @@ class AttendanceControllerState {
   AttendanceControllerState copyWith({
     bool? isBootstrapping,
     bool? isCapturing,
-    AttendanceRecord? remoteLastRecord,
     List<AttendanceRecord>? remoteTodayRecords,
     String? captureError,
     bool clearCaptureError = false,
-  }) => AttendanceControllerState(
-    isBootstrapping: isBootstrapping ?? this.isBootstrapping,
-    isCapturing: isCapturing ?? this.isCapturing,
-    remoteLastRecord: remoteLastRecord ?? this.remoteLastRecord,
-    remoteTodayRecords: remoteTodayRecords ?? this.remoteTodayRecords,
-    captureError: clearCaptureError ? null : (captureError ?? this.captureError),
-  );
+  }) =>
+      AttendanceControllerState(
+        isBootstrapping: isBootstrapping ?? this.isBootstrapping,
+        isCapturing: isCapturing ?? this.isCapturing,
+        remoteTodayRecords: remoteTodayRecords ?? this.remoteTodayRecords,
+        captureError:
+            clearCaptureError ? null : (captureError ?? this.captureError),
+      );
 }
 
 /// Drives the check-in/out screen: seeds the user's last known status from
@@ -62,7 +58,7 @@ class AttendanceControllerState {
 /// local queue → background sync) whenever the user taps the action button.
 class AttendanceController extends StateNotifier<AttendanceControllerState> {
   AttendanceController(this._repo, this._queue, this._syncService)
-    : super(const AttendanceControllerState()) {
+      : super(const AttendanceControllerState()) {
     _bootstrap();
   }
 
@@ -70,21 +66,46 @@ class AttendanceController extends StateNotifier<AttendanceControllerState> {
   final AttendanceQueueController _queue;
   final AttendanceSyncService _syncService;
 
+  /// Local calendar day of the last successful fetch, so [refreshToday] can
+  /// skip redundant refetches on resumes within the same day.
+  DateTime? _lastLoadedDay;
+
+  /// Guards against overlapping fetches — two rapid resumes could otherwise
+  /// race, and the response that arrives last (not the one sent last) would
+  /// win, briefly reverting [AttendanceControllerState.remoteTodayRecords].
+  bool _isLoading = false;
+
   Future<void> _bootstrap() async {
+    if (_isLoading) return;
+    _isLoading = true;
     try {
       final page = await _repo.myRecords(page: 1);
       if (!mounted) return;
+      _lastLoadedDay = _dayOf(DateTime.now());
       state = state.copyWith(
         isBootstrapping: false,
-        remoteLastRecord: page.records.isNotEmpty ? page.records.first : null,
-        remoteTodayRecords: page.records.where((r) => _isToday(r.recordedAt)).toList(),
+        remoteTodayRecords:
+            page.records.where((r) => _isToday(r.recordedAt)).toList(),
       );
     } on Exception {
       // Offline on first launch — fine, the local queue (if any) still
       // drives the status; an empty queue just defaults to "checked out".
       if (!mounted) return;
       state = state.copyWith(isBootstrapping: false);
+    } finally {
+      _isLoading = false;
     }
+  }
+
+  /// Re-fetches today's records from the server on app resume so a night spent
+  /// in the background doesn't leave yesterday's records driving this morning's
+  /// status. Resume fires on every task switch, so this refetches only when the
+  /// calendar day has actually changed since the last successful load.
+  Future<void> refreshToday() {
+    if (_lastLoadedDay != null && _lastLoadedDay == _dayOf(DateTime.now())) {
+      return Future.value();
+    }
+    return _bootstrap();
   }
 
   /// Runs the full capture flow for [type] (the action the user tapped —
@@ -109,8 +130,8 @@ class AttendanceController extends StateNotifier<AttendanceControllerState> {
         return false;
       }
 
-      final selfie = await _captureSelfie();
-      if (selfie == null) {
+      final selfiePath = await _captureSelfie();
+      if (selfiePath == null) {
         state = state.copyWith(
           isCapturing: false,
           captureError: 'لم يتم التقاط صورة شخصية.',
@@ -118,15 +139,22 @@ class AttendanceController extends StateNotifier<AttendanceControllerState> {
         return false;
       }
 
-      await _queue.add(
-        PendingAttendanceRecord(
-          type: type,
-          latitude: position.latitude,
-          longitude: position.longitude,
-          selfiePath: selfie.path,
-          recordedAt: DateTime.now(),
-        ),
-      );
+      try {
+        await _queue.add(
+          PendingAttendanceRecord(
+            type: type,
+            latitude: position.latitude,
+            longitude: position.longitude,
+            selfiePath: selfiePath,
+            recordedAt: DateTime.now(),
+          ),
+        );
+      } catch (_) {
+        // The persisted selfie is only ever cleaned up through its queue
+        // row — if the insert fails, delete the copy or it leaks forever.
+        deleteSelfieQuietly(await resolveSelfiePath(selfiePath));
+        rethrow;
+      }
 
       if (!mounted) return true;
       state = state.copyWith(isCapturing: false);
@@ -134,7 +162,10 @@ class AttendanceController extends StateNotifier<AttendanceControllerState> {
       // not this future. Failure (e.g. offline) just leaves it queued.
       unawaited(_syncService.syncPending());
       return true;
-    } on Exception catch (e) {
+    } catch (e) {
+      // Catch Object, not just Exception: AttendanceQueueController.add throws
+      // a StateError (an Error) when signed out, which would otherwise escape
+      // and leave isCapturing stuck true, dead-locking the button.
       if (!mounted) return false;
       state = state.copyWith(
         isCapturing: false,
@@ -164,51 +195,135 @@ class AttendanceController extends StateNotifier<AttendanceControllerState> {
     );
   }
 
-  Future<File?> _captureSelfie() async {
+  /// Captures a front-camera selfie and persists it out of the OS cache into
+  /// durable app-support storage. Returns the stored path (relative to
+  /// app-support), or null if the user cancelled the camera. A copy failure
+  /// (e.g. disk full) throws and aborts the capture — never queue the fragile
+  /// cache path, which is exactly what MIUI cleaners wipe.
+  Future<String?> _captureSelfie() async {
     final shot = await ImagePicker().pickImage(
       source: ImageSource.camera,
       preferredCameraDevice: CameraDevice.front,
       imageQuality: 80,
     );
     if (shot == null) return null;
-    return File(shot.path);
+    return persistSelfieForUpload(File(shot.path));
   }
 }
 
 final attendanceControllerProvider =
-    StateNotifierProvider<AttendanceController, AttendanceControllerState>((ref) {
-      return AttendanceController(
-        ref.watch(attendanceRepositoryProvider),
-        ref.watch(attendanceQueueProvider.notifier),
-        ref.watch(attendanceSyncServiceProvider),
-      );
-    });
+    StateNotifierProvider<AttendanceController, AttendanceControllerState>(
+        (ref) {
+  return AttendanceController(
+    ref.watch(attendanceRepositoryProvider),
+    ref.watch(attendanceQueueProvider.notifier),
+    ref.watch(attendanceSyncServiceProvider),
+  );
+});
 
-/// The user's current status — checked in or out — derived from whichever
-/// record is more recent: the latest locally-queued one, or the latest one
-/// the server knows about (seeded once on load; covers fresh installs and
-/// actions taken from another device). Null means "no history at all".
+/// The current local calendar day (midnight-truncated), recomputed shortly
+/// after each midnight.
+///
+/// Day-scoped providers must watch this instead of calling `DateTime.now()`
+/// directly: Riverpod only recomputes when a dependency changes, so an app
+/// kept alive across midnight would otherwise keep serving yesterday's
+/// status (e.g. still offering "تسجيل انصراف" the next morning).
+final currentLocalDayProvider = Provider<DateTime>((ref) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  // Small buffer past midnight so a timer that fires marginally early
+  // can't recompute to the same (old) day and never roll over.
+  final untilNextDay = today.add(const Duration(days: 1)).difference(now) +
+      const Duration(seconds: 1);
+  final timer = Timer(untilNextDay, ref.invalidateSelf);
+  ref.onDispose(timer.cancel);
+  return today;
+});
+
+/// The user's current status for this calendar day only.
+///
+/// Server-rejected local entries and backend-closed missing-checkout records
+/// are not valid attendance state. Excluding them also lets the employee retry
+/// the correct action after a deterministic sync rejection.
 final attendanceStatusProvider = Provider<AttendanceType?>((ref) {
-  final queue = ref.watch(attendanceQueueProvider);
-  final remote = ref.watch(attendanceControllerProvider).remoteLastRecord;
+  return resolveAttendanceStatus(
+    remoteRecords: ref.watch(attendanceControllerProvider).remoteTodayRecords,
+    localRecords: ref.watch(attendanceQueueProvider),
+    now: ref.watch(currentLocalDayProvider),
+  );
+});
+
+/// Resolves the latest valid attendance action for [now]'s local calendar day.
+/// Exposed separately from the provider so day-boundary behavior can be tested
+/// without camera, location, database, or network dependencies.
+AttendanceType? resolveAttendanceStatus({
+  required Iterable<AttendanceRecord> remoteRecords,
+  required Iterable<PendingAttendanceRecord> localRecords,
+  DateTime? now,
+}) {
+  final today = (now ?? DateTime.now()).toLocal();
+
+  AttendanceRecord? latestRemote;
+  for (final r in remoteRecords) {
+    if (r.isMissingCheckout || !_isSameLocalDay(r.recordedAt, today)) continue;
+    if (latestRemote == null || r.recordedAt.isAfter(latestRemote.recordedAt)) {
+      latestRemote = r;
+    }
+  }
 
   PendingAttendanceRecord? latestLocal;
-  for (final r in queue) {
+  for (final r in localRecords) {
+    if (r.isFailed || !_isSameLocalDay(r.recordedAt, today)) continue;
+    // Skip a local record the server already knows about: the remote copy is
+    // authoritative and was already considered above — including being
+    // excluded when the backend auto-closed it as missing_checkout. Without
+    // this, a synced local check-in (the queue keeps synced rows) keeps
+    // driving status even after the server closed the day, so the UI wrongly
+    // keeps the user "checked in" and offers a checkout the server rejects.
+    if (_hasRemoteTwin(r, remoteRecords)) continue;
     if (latestLocal == null || r.recordedAt.isAfter(latestLocal.recordedAt)) {
       latestLocal = r;
     }
   }
 
-  if (latestLocal == null) return remote?.type;
-  if (remote == null) return latestLocal.type;
-  return latestLocal.recordedAt.isAfter(remote.recordedAt)
+  if (latestLocal == null) return latestRemote?.type;
+  if (latestRemote == null) return latestLocal.type;
+  return latestLocal.recordedAt.isAfter(latestRemote.recordedAt)
       ? latestLocal.type
-      : remote.type;
-});
+      : latestRemote.type;
+}
+
+/// Whether [local] is the same logical check-in/out as a record the server
+/// already returned — matched by type and near-identical time. Used both to
+/// let the authoritative remote copy govern status and to avoid showing a
+/// duplicate tile in "today's records".
+bool _hasRemoteTwin(
+  PendingAttendanceRecord local,
+  Iterable<AttendanceRecord> remoteRecords,
+) {
+  return remoteRecords.any(
+    (rt) =>
+        rt.type == local.type &&
+        rt.recordedAt.difference(local.recordedAt).abs() <
+            const Duration(minutes: 2),
+  );
+}
+
+DateTime _dayOf(DateTime d) {
+  final local = d.toLocal();
+  return DateTime(local.year, local.month, local.day);
+}
 
 bool _isToday(DateTime d) {
-  final now = DateTime.now();
-  return d.year == now.year && d.month == now.month && d.day == now.day;
+  return _isSameLocalDay(d, DateTime.now());
+}
+
+bool _isSameLocalDay(DateTime a, DateTime b) {
+  final localA = a.toLocal();
+  final localB = b.toLocal();
+  return localA.year == localB.year &&
+      localA.month == localB.month &&
+      localA.day == localB.day;
 }
 
 /// "Today's records" (سجلات اليوم): the server's confirmed records for
@@ -218,16 +333,20 @@ bool _isToday(DateTime d) {
 /// [AttendanceControllerState.remoteTodayRecords] (matched by type and
 /// recorded time) isn't duplicated.
 final todayAttendanceProvider = Provider<List<TodayAttendanceItem>>((ref) {
-  final remoteToday = ref.watch(attendanceControllerProvider).remoteTodayRecords;
+  final today = ref.watch(currentLocalDayProvider);
+  // Re-filter both sources against the reactive day — remoteTodayRecords
+  // was filtered at fetch time, so after midnight it holds yesterday's
+  // records until the next bootstrap/refresh.
+  final remoteToday = ref
+      .watch(attendanceControllerProvider)
+      .remoteTodayRecords
+      .where((r) => _isSameLocalDay(r.recordedAt, today))
+      .toList();
   final queue = ref.watch(attendanceQueueProvider);
 
-  final localToday = queue.where((r) => _isToday(r.recordedAt)).where((r) {
-    return !remoteToday.any(
-      (rt) =>
-          rt.type == r.type &&
-          rt.recordedAt.difference(r.recordedAt).abs() < const Duration(minutes: 2),
-    );
-  });
+  final localToday = queue
+      .where((r) => _isSameLocalDay(r.recordedAt, today))
+      .where((r) => !_hasRemoteTwin(r, remoteToday));
 
   final items = [
     ...remoteToday.map(TodayAttendanceItem.remote),
