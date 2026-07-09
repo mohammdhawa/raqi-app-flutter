@@ -126,14 +126,21 @@ class AttendanceScreen extends ConsumerWidget {
     final isHome = !context.canPop();
     final nextType = status?.opposite ?? AttendanceType.checkIn;
 
-    // Pre-disable check-in outside the working window / on a day off / when
-    // already on approved leave — the server still has the final say.
+    // Pre-disable check-in once the day is already complete, outside the
+    // working window, on a day off, or when already on approved leave — the
+    // server still has the final say.
     String? checkInBlocked;
     if (nextType == AttendanceType.checkIn) {
-      checkInBlocked = checkInBlockedReason(DateTime.now());
-      if (checkInBlocked == null &&
-          ref.watch(approvedLeaveTodayProvider).valueOrNull != null) {
-        checkInBlocked = 'لديك إجازة معتمدة اليوم — لا حاجة لتسجيل الحضور.';
+      // A checkout for today (missing-checkout records are excluded upstream)
+      // means the single daily shift is already done — no second check-in.
+      if (status == AttendanceType.checkOut) {
+        checkInBlocked = 'لقد أكملت دوام اليوم — تم تسجيل الحضور والانصراف.';
+      } else {
+        checkInBlocked = checkInBlockedReason(DateTime.now());
+        if (checkInBlocked == null &&
+            ref.watch(approvedLeaveTodayProvider).valueOrNull != null) {
+          checkInBlocked = 'لديك إجازة معتمدة اليوم — لا حاجة لتسجيل الحضور.';
+        }
       }
     }
 
