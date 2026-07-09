@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../domain/pending_attendance_record.dart';
+import 'selfie_storage.dart';
 
 /// SQLite-backed offline queue for attendance check-ins/outs.
 ///
@@ -122,6 +123,18 @@ class AttendanceLocalDb {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  /// Basenames of every selfie still referenced by a queue row, across ALL
+  /// users. Used by the startup sweep to delete orphaned selfie files without
+  /// wiping another account's pending selfie on a shared device. [claimUserId]
+  /// is only needed to open the DB (see [_open]); the query itself is unscoped.
+  Future<Set<String>> referencedSelfieFileNames(int claimUserId) async {
+    final db = await _open(claimUserId);
+    final rows = await db.query(_table, columns: ['selfie_path']);
+    return {
+      for (final row in rows) selfieFileName(row['selfie_path'] as String),
+    };
   }
 
   /// Permanently removes a queued record — used to dismiss a server-rejected

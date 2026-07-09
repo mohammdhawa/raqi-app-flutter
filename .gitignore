@@ -24,6 +24,8 @@ android/.gradle/
 android/captures/
 android/local.properties
 android/key.properties
+*.jks
+*.keystore
 
 # iOS
 ios/Pods/

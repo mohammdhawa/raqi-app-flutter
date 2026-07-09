@@ -4,33 +4,25 @@
 /// every record and rejects with HTTP 422 + an Arabic `message`.
 ///
 /// Context (single timezone Asia/Damascus, single shift, no overnight):
-///   • Working days are Sunday–Thursday; Friday & Saturday are off.
-///   • Check-in is allowed only between 06:00 and 17:00.
+///   • Every day is a working day — Friday & Saturday included.
+///   • Check-in is open 24 hours; there is no time-of-day window.
+///
+/// These mirror the server config (`working_days` = all 7 days, empty
+/// check-in window). Leave / duplicate / leave-overlap checks stay
+/// server-side, so there is no day/time reason to block check-in here.
 library;
 
-/// Earliest hour (inclusive) a check-in is accepted.
-const int kCheckInStartHour = 6;
+/// Every day is a working day (weekends included). Also drives the leave
+/// preview's chargeable-day count (see [workingDaysBetween] in leave.dart),
+/// so weekends now count toward leave balance too.
+bool isWorkingDay(DateTime d) => true;
 
-/// First hour at which check-in is no longer accepted (i.e. 17:00 onward).
-const int kCheckInEndHour = 17;
-
-/// Sun–Thu are working days; Fri & Sat are off.
-bool isWorkingDay(DateTime d) =>
-    d.weekday != DateTime.friday && d.weekday != DateTime.saturday;
-
-/// Whether [now] falls inside the 06:00–17:00 check-in window.
-bool isWithinCheckInWindow(DateTime now) =>
-    now.hour >= kCheckInStartHour && now.hour < kCheckInEndHour;
+/// Check-in is open 24 hours; there is no time-of-day restriction.
+bool isWithinCheckInWindow(DateTime now) => true;
 
 /// Returns an Arabic reason the user can't check in right now, or `null`
-/// when check-in is currently allowed. Mirrors the server's day/window
-/// rules (leave/duplicate checks stay server-side).
-String? checkInBlockedReason(DateTime now) {
-  if (!isWorkingDay(now)) {
-    return 'لا يمكن تسجيل الحضور في أيام العطلة (الجمعة والسبت).';
-  }
-  if (!isWithinCheckInWindow(now)) {
-    return 'تسجيل الحضور متاح فقط بين الساعة 06:00 و 17:00.';
-  }
-  return null;
-}
+/// when check-in is currently allowed. Day and time no longer block
+/// check-in (open 24/7); the remaining rules (leave, duplicate) are enforced
+/// server-side, so this is always `null` today. Kept as the single hook the
+/// check-in screen calls, so a future client-side pre-check has one home.
+String? checkInBlockedReason(DateTime now) => null;

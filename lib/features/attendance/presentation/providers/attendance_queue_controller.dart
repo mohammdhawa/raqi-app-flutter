@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../data/attendance_local_db.dart';
+import '../../data/selfie_storage.dart';
 import '../../domain/pending_attendance_record.dart';
 
 /// Owns the local offline queue: loads it on startup, appends freshly
@@ -53,7 +54,19 @@ class AttendanceQueueController extends StateNotifier<List<PendingAttendanceReco
   Future<void> dismiss(int id) async {
     final userId = _userId;
     if (userId == null) return;
+    String? selfiePath;
+    for (final r in state) {
+      if (r.id == id) {
+        selfiePath = r.selfiePath;
+        break;
+      }
+    }
     await _db.delete(id, userId);
+    // The row is gone for good, so its persisted selfie is unreachable —
+    // clean it up best-effort; a failed delete must not block the dismissal.
+    if (selfiePath != null) {
+      deleteSelfieQuietly(await resolveSelfiePath(selfiePath));
+    }
     if (!mounted) return;
     state = [for (final r in state) if (r.id != id) r];
   }
