@@ -569,12 +569,47 @@ class _CheckInOutButton extends StatelessWidget {
 //  PENDING-SYNC BANNER
 // ═══════════════════════════════════════════════════════════════════════
 
-class _PendingBanner extends StatelessWidget {
+class _PendingBanner extends ConsumerWidget {
   const _PendingBanner({required this.count});
   final int count;
 
+  /// Escape hatch for a queue the server never accepts: confirm, then drop
+  /// every pending record. Guarded by a dialog because it's irreversible —
+  /// these records can't reach the server anymore either way.
+  Future<void> _confirmDiscard(BuildContext context, WidgetRef ref) async {
+    final shouldDiscard = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('حذف السجلات المعلّقة'),
+          content: Text(
+            'سيتم حذف $count سجلًا لم يتمكن التطبيق من مزامنتها مع الخادم. '
+            'لا يمكن التراجع عن هذا الإجراء. هل تريد المتابعة؟',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text(
+                'حذف',
+                style: TextStyle(color: AppColors.rejected),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (shouldDiscard == true) {
+      await ref.read(attendanceQueueProvider.notifier).discardPending();
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -595,6 +630,21 @@ class _PendingBanner extends StatelessWidget {
                   ? 'يوجد سجل واحد بانتظار المزامنة — سيُرفع تلقائيًا عند توفر الاتصال.'
                   : 'يوجد $count سجلات بانتظار المزامنة — ستُرفع تلقائيًا عند توفر الاتصال.',
               style: AppTheme.bodyS(color: AppColors.pendingText),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => _confirmDiscard(context, ref),
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Text(
+                'حذف',
+                style: AppTheme.bodyS(color: AppColors.pendingText).copyWith(
+                  fontWeight: FontWeight.w700,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
             ),
           ),
         ],

@@ -71,6 +71,27 @@ class AttendanceQueueController extends StateNotifier<List<PendingAttendanceReco
     state = [for (final r in state) if (r.id != id) r];
   }
 
+  /// Discards every still-`pending` record (and its selfie) for this user.
+  /// Escape hatch for a queue the server will never accept — e.g. records
+  /// stranded pending by a server-side account/permission problem, which no
+  /// number of retries can clear. Unlike [dismiss] (one server-rejected
+  /// `failed` entry), this drops the whole pending backlog at once. The
+  /// records are unrecoverable at this point, so this is data the device can
+  /// no longer get onto the server regardless.
+  Future<void> discardPending() async {
+    final userId = _userId;
+    if (userId == null) return;
+    final pending = [for (final r in state) if (r.isPending) r];
+    for (final r in pending) {
+      if (r.id == null) continue;
+      await _db.delete(r.id!, userId);
+      // Row is gone for good — reclaim its persisted selfie best-effort.
+      deleteSelfieQuietly(await resolveSelfiePath(r.selfiePath));
+    }
+    if (!mounted) return;
+    state = [for (final r in state) if (!r.isPending) r];
+  }
+
   Future<void> _setStatus(
     int id,
     AttendanceSyncStatus status, {
