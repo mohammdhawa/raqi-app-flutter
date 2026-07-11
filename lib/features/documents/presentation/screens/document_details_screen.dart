@@ -98,9 +98,12 @@ class _DocumentDetailsScreenState
 
   bool _canDelete(Document? doc, dynamic user) {
     if (doc == null || user == null) return false;
+    // Deletable through the whole pending phase — a manager approving an
+    // intermediate step no longer blocks it; only the chief's final
+    // decision (approved/rejected) does. Mirrors DELETE /api/documents/{id}.
     if (doc.status != DocumentStatus.pending) return false;
     if (doc.creator.id != user.id) return false;
-    return doc.workflows.every((s) => s.status == WorkflowStepStatus.pending);
+    return true;
   }
 
   Future<void> _confirmAndDelete() async {
