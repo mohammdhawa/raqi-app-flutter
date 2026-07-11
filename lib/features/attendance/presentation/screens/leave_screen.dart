@@ -72,15 +72,15 @@ class _LeaveScreenState extends ConsumerState<LeaveScreen>
           ),
         ],
       ),
-      floatingActionButton: isManager
-          ? FloatingActionButton.extended(
-              onPressed: () => context.push('/attendance/leave/new'),
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add),
-              label: const Text('طلب إجازة'),
-            )
-          : null,
+      // Anyone may submit a leave request; the backend authorizes by role.
+      // (The approvals tab above stays manager-only.)
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => context.push('/attendance/leave/new'),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add),
+        label: const Text('طلب إجازة'),
+      ),
     );
   }
 }
