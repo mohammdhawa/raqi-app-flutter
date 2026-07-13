@@ -1,7 +1,7 @@
 name: doc_approval
 description: Document Approval Workflow mobile app.
 publish_to: "none"
-version: 1.0.5+6
+version: 1.0.6+7
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -45,6 +45,7 @@ dependencies:
   intl: 0.20.2
   freezed_annotation: ^2.4.1
   json_annotation: ^4.9.0
+  package_info_plus: ^9.0.1
 
   syncfusion_flutter_pdfviewer: 33.2.5
   geolocator: ^14.0.2

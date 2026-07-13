@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/errors/api_failure.dart';
+import '../../../../core/providers/app_info_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../providers/auth_controller.dart';
 
@@ -56,6 +57,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final hasError = _errorMessage != null;
+    final version = ref.watch(appVersionProvider);
 
     return Scaffold(
       backgroundColor: AppColors.white,
@@ -324,11 +326,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const SizedBox(height: 48),
 
                     // ── 20. Version footer ────────────────────────
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 24),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 24),
                       child: Text(
-                        'AL-RAQI · v 1.0.0',
-                        style: TextStyle(
+                        'AL-RAQI · v $version',
+                        style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 11,
                           fontWeight: FontWeight.w400,

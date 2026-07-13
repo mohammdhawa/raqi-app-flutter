@@ -205,7 +205,12 @@ class AttendanceController extends StateNotifier<AttendanceControllerState> {
     final shot = await ImagePicker().pickImage(
       source: ImageSource.camera,
       preferredCameraDevice: CameraDevice.front,
-      imageQuality: 80,
+      // Compress before persistence/upload. Bounding both dimensions handles
+      // portrait and landscape camera output while retaining clear facial
+      // detail for the employee reviewing attendance.
+      maxWidth: attendanceSelfieMaxDimension,
+      maxHeight: attendanceSelfieMaxDimension,
+      imageQuality: attendanceSelfieJpegQuality,
     );
     if (shot == null) return null;
     return persistSelfieForUpload(File(shot.path));

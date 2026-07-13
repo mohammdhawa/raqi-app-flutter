@@ -83,8 +83,11 @@ void main() {
       File('${dir.path}${Platform.pathSeparator}$name')
         ..writeAsBytesSync(const [1, 2, 3]);
 
-  ({ProviderContainer container, _FakeLocalDb db, _FakeAttendanceRepository repo})
-      harness(List<PendingAttendanceRecord> records) {
+  ({
+    ProviderContainer container,
+    _FakeLocalDb db,
+    _FakeAttendanceRepository repo
+  }) harness(List<PendingAttendanceRecord> records) {
     final db = _FakeLocalDb(records);
     final repo = _FakeAttendanceRepository();
     final container = ProviderContainer(overrides: [
@@ -99,6 +102,12 @@ void main() {
   }
 
   group('selfie storage', () {
+    test('capture policy preserves review detail while bounding image size',
+        () {
+      expect(attendanceSelfieMaxDimension, 1600);
+      expect(attendanceSelfieJpegQuality, 85);
+    });
+
     test('persist copies the selfie and stores a path relative to app-support',
         () async {
       final cacheDir = tempDir('selfie_cache');

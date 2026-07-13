@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/providers/app_info_provider.dart';
 
 // TODO: Replace with your actual import path
 // import 'package:your_app/theme/app_colors.dart';
@@ -6,7 +9,7 @@ import 'package:flutter/material.dart';
 /// ──────────────────────────────────────────────────────────────────────────────
 /// About Screen — SESSION 8
 /// ──────────────────────────────────────────────────────────────────────────────
-class AboutScreen extends StatelessWidget {
+class AboutScreen extends ConsumerWidget {
   const AboutScreen({super.key});
 
   // ── Constants ──────────────────────────────────────────────────────────────
@@ -21,14 +24,14 @@ class AboutScreen extends StatelessWidget {
   static const Color _white = Color(0xFFFFFFFF);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: _white,
         body: Column(
           children: [
-            _buildAppBar(context),
+            _buildAppBar(context, ref.watch(appVersionProvider)),
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -38,7 +41,7 @@ class AboutScreen extends StatelessWidget {
                     const SizedBox(height: 22),
                     _buildInfoTiles(),
                     const SizedBox(height: 24),
-                    _buildVersionLegal(),
+                    _buildVersionLegal(ref.watch(appVersionProvider)),
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -51,7 +54,7 @@ class AboutScreen extends StatelessWidget {
   }
 
   // ── App Bar ────────────────────────────────────────────────────────────────
-  Widget _buildAppBar(BuildContext context) {
+  Widget _buildAppBar(BuildContext context, String version) {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.only(
@@ -97,7 +100,7 @@ class AboutScreen extends StatelessWidget {
                 ),
               ),
               Text(
-                'الإصدار 1.0.0',
+                'الإصدار $version',
                 style: TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 11,
@@ -218,15 +221,15 @@ class AboutScreen extends StatelessWidget {
   }
 
   // ── 3. Version & Legal ─────────────────────────────────────────────────────
-  Widget _buildVersionLegal() {
+  Widget _buildVersionLegal(String version) {
     return Column(
       children: [
         Center(child: Container(width: 24, height: 2, color: _accent)),
         const SizedBox(height: 12),
-        const Text(
-          'الإصدار 1.0.0',
+        Text(
+          'الإصدار $version',
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             fontFamily: 'Cairo',
             fontSize: 11,
             fontWeight: FontWeight.w400,
