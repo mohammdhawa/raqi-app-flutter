@@ -124,6 +124,16 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp>
       return;
     }
 
+    // An admin broadcast ("type": "broadcast") opens the dedicated broadcast
+    // page, which resolves the message from the list by its broadcast_id.
+    if (data['type'] == 'broadcast') {
+      final broadcastId = data['broadcast_id']?.toString();
+      if (broadcastId != null && broadcastId.isNotEmpty) {
+        router.push('/notifications/broadcast/$broadcastId');
+      }
+      return;
+    }
+
     // A leave_request_id takes precedence so leave notifications open the
     // relevant request.
     final leaveRequestId = _asId(data['leave_request_id']);

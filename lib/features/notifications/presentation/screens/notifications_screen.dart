@@ -210,6 +210,19 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       return;
     }
 
+    // An admin broadcast carries no document/leave id — open the dedicated
+    // page to read the full message. Pass the notification as `extra` so it
+    // renders instantly.
+    if (notification.isBroadcast && notification.broadcastId != null) {
+      if (mounted) {
+        context.push(
+          '/notifications/broadcast/${notification.broadcastId}',
+          extra: notification,
+        );
+      }
+      return;
+    }
+
     // Navigate based on the payload. A leave_request_id always wins so leave
     // notifications open the relevant request regardless of `type`.
     final leaveId = notification.leaveRequestId;
@@ -425,6 +438,10 @@ class _NotificationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUnread = notification.isUnread;
+    // A broadcast may arrive in the list as `general` carrying only a
+    // broadcast_id — treat it as a broadcast for the icon/chip regardless.
+    final effectiveType =
+        notification.isBroadcast ? NotificationType.broadcast : notification.type;
 
     return InkWell(
       onTap: onTap,
@@ -489,7 +506,7 @@ class _NotificationCard extends StatelessWidget {
                         style: TextStyle(color: AppColors.text3, fontSize: 12),
                       ),
                       const SizedBox(width: 8),
-                      _StatusChip(type: notification.type),
+                      _StatusChip(type: effectiveType),
                     ],
                   ),
                 ],
@@ -499,7 +516,7 @@ class _NotificationCard extends StatelessWidget {
             const SizedBox(width: 12),
 
             // Type icon.
-            _TypeIcon(type: notification.type),
+            _TypeIcon(type: effectiveType),
           ],
         ),
       ),
@@ -540,6 +557,11 @@ class _TypeIcon extends StatelessWidget {
           AppColors.pendingBg,
           AppColors.pending,
           Icons.logout_rounded,
+        ),
+      NotificationType.broadcast => (
+          AppColors.accentSoft,
+          AppColors.primary,
+          Icons.campaign_rounded,
         ),
       NotificationType.general => (
           AppColors.surface2,
@@ -593,6 +615,11 @@ class _StatusChip extends StatelessWidget {
           'تذكير انصراف',
           AppColors.pendingText,
           AppColors.pendingBg,
+        ),
+      NotificationType.broadcast => (
+          'تعميم',
+          AppColors.primary,
+          AppColors.accentSoft,
         ),
       NotificationType.general => (
           'وارد',

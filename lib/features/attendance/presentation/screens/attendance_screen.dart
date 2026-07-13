@@ -126,22 +126,27 @@ class AttendanceScreen extends ConsumerWidget {
     final isHome = !context.canPop();
     final nextType = status?.opposite ?? AttendanceType.checkIn;
 
-    // Pre-disable check-in once the day is already complete, outside the
-    // working window, on a day off, or when already on approved leave — the
-    // server still has the final say.
-    String? checkInBlocked;
+    // Pre-disable the tapped action whenever we can already predict the server
+    // will reject it — cutting down on failed round-trips. The server still has
+    // the final say either way.
+    String? disabledReason;
     if (nextType == AttendanceType.checkIn) {
+      // Blocked once the day is complete, on a day off, or on approved leave.
       // A checkout for today (missing-checkout records are excluded upstream)
       // means the single daily shift is already done — no second check-in.
       if (status == AttendanceType.checkOut) {
-        checkInBlocked = 'لقد أكملت دوام اليوم — تم تسجيل الحضور والانصراف.';
+        disabledReason = 'لقد أكملت دوام اليوم — تم تسجيل الحضور والانصراف.';
       } else {
-        checkInBlocked = checkInBlockedReason(DateTime.now());
-        if (checkInBlocked == null &&
+        disabledReason = checkInBlockedReason(DateTime.now());
+        if (disabledReason == null &&
             ref.watch(approvedLeaveTodayProvider).valueOrNull != null) {
-          checkInBlocked = 'لديك إجازة معتمدة اليوم — لا حاجة لتسجيل الحضور.';
+          disabledReason = 'لديك إجازة معتمدة اليوم — لا حاجة لتسجيل الحضور.';
         }
       }
+    } else {
+      // Checking out: block until the backend's minimum check-in→checkout gap
+      // has elapsed, showing a live countdown while it hasn't.
+      disabledReason = ref.watch(checkOutBlockedReasonProvider);
     }
 
     return Directionality(
@@ -173,7 +178,7 @@ class AttendanceScreen extends ConsumerWidget {
                     _CheckInOutButton(
                       nextType: nextType,
                       isCapturing: controllerState.isCapturing,
-                      disabledReason: checkInBlocked,
+                      disabledReason: disabledReason,
                       onTap: () => _handleTap(context, ref, nextType),
                     ),
                     if (pendingCount > 0) ...[
