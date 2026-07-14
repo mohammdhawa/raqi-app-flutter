@@ -9,7 +9,7 @@ import '../../../auth/domain/user.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../domain/attendance_record.dart';
 import '../../domain/attendance_window.dart';
-import '../../domain/pending_attendance_record.dart';
+import '../../domain/pending_attendance_record.dart' show AttendanceSyncStatus;
 import '../../domain/today_attendance_item.dart';
 import '../providers/attendance_controller.dart';
 import '../providers/attendance_queue_controller.dart';
@@ -84,39 +84,14 @@ class AttendanceScreen extends ConsumerWidget {
     }
   }
 
-  /// Pops a red snackbar whenever a queued record is newly rejected by the
-  /// server (business-rule 422 surfaced through the background sync), showing
-  /// the Arabic `error` exactly as returned. Detected by comparing the
-  /// previous and next queue snapshots, so each rejection alerts once.
-  void _listenForSyncRejections(BuildContext context, WidgetRef ref) {
-    ref.listen<List<PendingAttendanceRecord>>(attendanceQueueProvider, (
-      prev,
-      next,
-    ) {
-      final wasFailed = {
-        for (final r in prev ?? const <PendingAttendanceRecord>[])
-          if (r.id != null && r.isFailed) r.id,
-      };
-      for (final r in next) {
-        if (r.isFailed && r.id != null && !wasFailed.contains(r.id)) {
-          final message = r.errorMessage;
-          if (message == null || message.isEmpty) continue;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: AppColors.rejected,
-              duration: const Duration(seconds: 6),
-              content: Text(message),
-            ),
-          );
-        }
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    _listenForSyncRejections(context, ref);
-
+    // A queued record the server rejects is surfaced inline on its own row in
+    // "today's records" below (a red, dismissible tile carrying the server's
+    // Arabic message). We deliberately don't also raise a global SnackBar for
+    // it: the app has a single app-level ScaffoldMessenger, so such a SnackBar
+    // lingers across navigation and reappears on unrelated screens (documents,
+    // etc.). The inline tile keeps the rejection where it belongs.
     final user = ref.watch(currentUserProvider);
     final status = ref.watch(attendanceStatusProvider);
     final controllerState = ref.watch(attendanceControllerProvider);
