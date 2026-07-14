@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../data/attendance_repository.dart';
 import '../../data/selfie_storage.dart';
 import '../../domain/attendance_record.dart';
+import '../../domain/attendance_window.dart';
 import '../../domain/pending_attendance_record.dart';
 import '../../domain/today_attendance_item.dart';
 import 'attendance_queue_controller.dart';
@@ -204,7 +205,12 @@ class AttendanceController extends StateNotifier<AttendanceControllerState> {
     final shot = await ImagePicker().pickImage(
       source: ImageSource.camera,
       preferredCameraDevice: CameraDevice.front,
-      imageQuality: 80,
+      // Compress before persistence/upload. Bounding both dimensions handles
+      // portrait and landscape camera output while retaining clear facial
+      // detail for the employee reviewing attendance.
+      maxWidth: attendanceSelfieMaxDimension,
+      maxHeight: attendanceSelfieMaxDimension,
+      imageQuality: attendanceSelfieJpegQuality,
     );
     if (shot == null) return null;
     return persistSelfieForUpload(File(shot.path));
@@ -253,10 +259,66 @@ final attendanceStatusProvider = Provider<AttendanceType?>((ref) {
   );
 });
 
+/// Arabic reason the checkout button is pre-disabled because the backend's
+/// minimum check-in→checkout gap hasn't elapsed yet, or `null` when checkout
+/// is allowed (the gap has passed, or the user isn't currently checked in).
+///
+/// Mirrors `attendance.min_checkout_gap_minutes` (default 60) so an obviously
+/// too-early checkout never even leaves the device; the backend stays
+/// authoritative and still rejects one with a 422 message if it's configured
+/// to a longer gap. autoDispose so the per-minute countdown timer is torn down
+/// as soon as the screen stops watching this.
+final checkOutBlockedReasonProvider = Provider.autoDispose<String?>((ref) {
+  final latest = resolveLatestAttendance(
+    remoteRecords: ref.watch(attendanceControllerProvider).remoteTodayRecords,
+    localRecords: ref.watch(attendanceQueueProvider),
+    now: ref.watch(currentLocalDayProvider),
+  );
+  if (latest == null || latest.type != AttendanceType.checkIn) return null;
+
+  final now = DateTime.now();
+  final remaining = checkoutGapRemaining(latest.recordedAt, now);
+  if (remaining == null) return null;
+
+  // Re-evaluate right after the displayed minute count next changes — i.e. at
+  // the next whole-minute boundary of the remaining time, or exactly when the
+  // gap lifts, whichever is sooner — so the countdown never lags by up to a
+  // minute, while still rebuilding at most once per minute. (The small buffer
+  // lands us just past the boundary, so the recomputed value is the new one.)
+  final msIntoMinute =
+      remaining.inMilliseconds % Duration.millisecondsPerMinute;
+  final untilNextTick = Duration(
+    milliseconds:
+        (msIntoMinute == 0 ? Duration.millisecondsPerMinute : msIntoMinute) +
+            250,
+  );
+  final timer = Timer(untilNextTick, ref.invalidateSelf);
+  ref.onDispose(timer.cancel);
+
+  return checkOutBlockedReason(latest.recordedAt, now);
+});
+
 /// Resolves the latest valid attendance action for [now]'s local calendar day.
 /// Exposed separately from the provider so day-boundary behavior can be tested
 /// without camera, location, database, or network dependencies.
 AttendanceType? resolveAttendanceStatus({
+  required Iterable<AttendanceRecord> remoteRecords,
+  required Iterable<PendingAttendanceRecord> localRecords,
+  DateTime? now,
+}) =>
+    resolveLatestAttendance(
+      remoteRecords: remoteRecords,
+      localRecords: localRecords,
+      now: now,
+    )?.type;
+
+/// The latest valid attendance action governing [now]'s local calendar day —
+/// both its type and the moment it was recorded — or `null` when there's no
+/// valid record for today. [resolveAttendanceStatus] (which action to offer
+/// next) and [checkOutBlockedReasonProvider] (how long since check-in) both
+/// derive from this single selection, so they can never disagree about which
+/// record is the latest one.
+({AttendanceType type, DateTime recordedAt})? resolveLatestAttendance({
   required Iterable<AttendanceRecord> remoteRecords,
   required Iterable<PendingAttendanceRecord> localRecords,
   DateTime? now,
@@ -286,11 +348,17 @@ AttendanceType? resolveAttendanceStatus({
     }
   }
 
-  if (latestLocal == null) return latestRemote?.type;
-  if (latestRemote == null) return latestLocal.type;
+  if (latestLocal == null) {
+    return latestRemote == null
+        ? null
+        : (type: latestRemote.type, recordedAt: latestRemote.recordedAt);
+  }
+  if (latestRemote == null) {
+    return (type: latestLocal.type, recordedAt: latestLocal.recordedAt);
+  }
   return latestLocal.recordedAt.isAfter(latestRemote.recordedAt)
-      ? latestLocal.type
-      : latestRemote.type;
+      ? (type: latestLocal.type, recordedAt: latestLocal.recordedAt)
+      : (type: latestRemote.type, recordedAt: latestRemote.recordedAt);
 }
 
 /// Whether [local] is the same logical check-in/out as a record the server

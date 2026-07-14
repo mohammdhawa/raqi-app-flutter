@@ -9,7 +9,7 @@ import '../../../auth/domain/user.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../domain/attendance_record.dart';
 import '../../domain/attendance_window.dart';
-import '../../domain/pending_attendance_record.dart';
+import '../../domain/pending_attendance_record.dart' show AttendanceSyncStatus;
 import '../../domain/today_attendance_item.dart';
 import '../providers/attendance_controller.dart';
 import '../providers/attendance_queue_controller.dart';
@@ -84,39 +84,14 @@ class AttendanceScreen extends ConsumerWidget {
     }
   }
 
-  /// Pops a red snackbar whenever a queued record is newly rejected by the
-  /// server (business-rule 422 surfaced through the background sync), showing
-  /// the Arabic `error` exactly as returned. Detected by comparing the
-  /// previous and next queue snapshots, so each rejection alerts once.
-  void _listenForSyncRejections(BuildContext context, WidgetRef ref) {
-    ref.listen<List<PendingAttendanceRecord>>(attendanceQueueProvider, (
-      prev,
-      next,
-    ) {
-      final wasFailed = {
-        for (final r in prev ?? const <PendingAttendanceRecord>[])
-          if (r.id != null && r.isFailed) r.id,
-      };
-      for (final r in next) {
-        if (r.isFailed && r.id != null && !wasFailed.contains(r.id)) {
-          final message = r.errorMessage;
-          if (message == null || message.isEmpty) continue;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: AppColors.rejected,
-              duration: const Duration(seconds: 6),
-              content: Text(message),
-            ),
-          );
-        }
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    _listenForSyncRejections(context, ref);
-
+    // A queued record the server rejects is surfaced inline on its own row in
+    // "today's records" below (a red, dismissible tile carrying the server's
+    // Arabic message). We deliberately don't also raise a global SnackBar for
+    // it: the app has a single app-level ScaffoldMessenger, so such a SnackBar
+    // lingers across navigation and reappears on unrelated screens (documents,
+    // etc.). The inline tile keeps the rejection where it belongs.
     final user = ref.watch(currentUserProvider);
     final status = ref.watch(attendanceStatusProvider);
     final controllerState = ref.watch(attendanceControllerProvider);
@@ -126,15 +101,27 @@ class AttendanceScreen extends ConsumerWidget {
     final isHome = !context.canPop();
     final nextType = status?.opposite ?? AttendanceType.checkIn;
 
-    // Pre-disable check-in outside the working window / on a day off / when
-    // already on approved leave — the server still has the final say.
-    String? checkInBlocked;
+    // Pre-disable the tapped action whenever we can already predict the server
+    // will reject it — cutting down on failed round-trips. The server still has
+    // the final say either way.
+    String? disabledReason;
     if (nextType == AttendanceType.checkIn) {
-      checkInBlocked = checkInBlockedReason(DateTime.now());
-      if (checkInBlocked == null &&
-          ref.watch(approvedLeaveTodayProvider).valueOrNull != null) {
-        checkInBlocked = 'لديك إجازة معتمدة اليوم — لا حاجة لتسجيل الحضور.';
+      // Blocked once the day is complete, on a day off, or on approved leave.
+      // A checkout for today (missing-checkout records are excluded upstream)
+      // means the single daily shift is already done — no second check-in.
+      if (status == AttendanceType.checkOut) {
+        disabledReason = 'لقد أكملت دوام اليوم — تم تسجيل الحضور والانصراف.';
+      } else {
+        disabledReason = checkInBlockedReason(DateTime.now());
+        if (disabledReason == null &&
+            ref.watch(approvedLeaveTodayProvider).valueOrNull != null) {
+          disabledReason = 'لديك إجازة معتمدة اليوم — لا حاجة لتسجيل الحضور.';
+        }
       }
+    } else {
+      // Checking out: block until the backend's minimum check-in→checkout gap
+      // has elapsed, showing a live countdown while it hasn't.
+      disabledReason = ref.watch(checkOutBlockedReasonProvider);
     }
 
     return Directionality(
@@ -166,7 +153,7 @@ class AttendanceScreen extends ConsumerWidget {
                     _CheckInOutButton(
                       nextType: nextType,
                       isCapturing: controllerState.isCapturing,
-                      disabledReason: checkInBlocked,
+                      disabledReason: disabledReason,
                       onTap: () => _handleTap(context, ref, nextType),
                     ),
                     if (pendingCount > 0) ...[
@@ -562,12 +549,47 @@ class _CheckInOutButton extends StatelessWidget {
 //  PENDING-SYNC BANNER
 // ═══════════════════════════════════════════════════════════════════════
 
-class _PendingBanner extends StatelessWidget {
+class _PendingBanner extends ConsumerWidget {
   const _PendingBanner({required this.count});
   final int count;
 
+  /// Escape hatch for a queue the server never accepts: confirm, then drop
+  /// every pending record. Guarded by a dialog because it's irreversible —
+  /// these records can't reach the server anymore either way.
+  Future<void> _confirmDiscard(BuildContext context, WidgetRef ref) async {
+    final shouldDiscard = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('حذف السجلات المعلّقة'),
+          content: Text(
+            'سيتم حذف $count سجلًا لم يتمكن التطبيق من مزامنتها مع الخادم. '
+            'لا يمكن التراجع عن هذا الإجراء. هل تريد المتابعة؟',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text(
+                'حذف',
+                style: TextStyle(color: AppColors.rejected),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (shouldDiscard == true) {
+      await ref.read(attendanceQueueProvider.notifier).discardPending();
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -588,6 +610,21 @@ class _PendingBanner extends StatelessWidget {
                   ? 'يوجد سجل واحد بانتظار المزامنة — سيُرفع تلقائيًا عند توفر الاتصال.'
                   : 'يوجد $count سجلات بانتظار المزامنة — ستُرفع تلقائيًا عند توفر الاتصال.',
               style: AppTheme.bodyS(color: AppColors.pendingText),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => _confirmDiscard(context, ref),
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Text(
+                'حذف',
+                style: AppTheme.bodyS(color: AppColors.pendingText).copyWith(
+                  fontWeight: FontWeight.w700,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
             ),
           ),
         ],

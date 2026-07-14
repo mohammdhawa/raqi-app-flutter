@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
+import 'core/providers/app_info_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/theme/app_theme.dart';
@@ -25,9 +27,16 @@ void main() async {
 
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
+  // Read the version from the platform build (derived from pubspec.yaml) so the
+  // splash/login/about captions stay in sync with a single source of truth.
+  final packageInfo = await PackageInfo.fromPlatform();
+
   runApp(
-    const ProviderScope(
-      child: DocApprovalApp(),
+    ProviderScope(
+      overrides: [
+        appVersionProvider.overrideWithValue(packageInfo.version),
+      ],
+      child: const DocApprovalApp(),
     ),
   );
 }
@@ -121,6 +130,16 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp>
     // check-in/out screen so the user can record the انصراف they forgot.
     if (data['type'] == 'attendance_checkout_reminder') {
       router.push('/attendance');
+      return;
+    }
+
+    // An admin broadcast ("type": "broadcast") opens the dedicated broadcast
+    // page, which resolves the message from the list by its broadcast_id.
+    if (data['type'] == 'broadcast') {
+      final broadcastId = data['broadcast_id']?.toString();
+      if (broadcastId != null && broadcastId.isNotEmpty) {
+        router.push('/notifications/broadcast/$broadcastId');
+      }
       return;
     }
 

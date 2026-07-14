@@ -110,7 +110,13 @@ class DocumentDetailsController extends StateNotifier<DocumentDetailsState> {
   }
 }
 
-final documentDetailsProvider = StateNotifierProvider.family<
+// autoDispose so the controller is torn down when the details screen is
+// popped. This forces a fresh fetch on every open, which matters when a
+// document is deleted (by the creator, per _canDelete) and then re-opened
+// via a lingering notification: instead of serving the stale cached copy —
+// complete with actionable approve/reject buttons that then 404 — the
+// refetch hits 404/not_found and the screen shows the not-found state.
+final documentDetailsProvider = StateNotifierProvider.autoDispose.family<
     DocumentDetailsController, DocumentDetailsState, int>((ref, id) {
   return DocumentDetailsController(
     ref.watch(documentsRepositoryProvider),

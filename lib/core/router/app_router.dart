@@ -13,6 +13,8 @@ import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/documents/presentation/screens/create_document_screen.dart';
 import '../../features/documents/presentation/screens/document_details_screen.dart';
 import '../../features/documents/presentation/screens/documents_home_screen.dart';
+import '../../features/notifications/domain/notification_model.dart';
+import '../../features/notifications/presentation/screens/broadcast_notification_screen.dart';
 import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../features/splash/splash_screen.dart';
 
@@ -70,6 +72,22 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'notifications',
             builder: (_, __) => const NotificationsScreen(),
+            routes: [
+              GoRoute(
+                path: 'broadcast/:id',
+                builder: (context, state) {
+                  final id = state.pathParameters['id'] ?? '';
+                  if (id.isEmpty) return const _NotFoundScreen();
+                  // When opened from the in-app list, the notification comes
+                  // through as `extra` so its content renders immediately.
+                  final extra = state.extra;
+                  return BroadcastNotificationScreen(
+                    broadcastId: id,
+                    initial: extra is AppNotification ? extra : null,
+                  );
+                },
+              ),
+            ],
           ),
           GoRoute(
             path: 'about',

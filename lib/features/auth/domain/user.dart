@@ -35,7 +35,8 @@ class User {
   bool get isChief => role == 'chief';
   bool get isEmployee => role == 'employee';
 
-  /// Only managers may submit / approve leave requests.
+  /// Only managers may approve leave requests (approvals tab / review flow).
+  /// Anyone may *submit* a request — that gate was removed on the backend.
   bool get isManager => role == 'manager';
 
   factory User.empty() => const User(

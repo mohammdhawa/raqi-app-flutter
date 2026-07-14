@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers/app_info_provider.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../auth/presentation/providers/auth_controller.dart';
@@ -80,6 +81,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
+    final version = ref.watch(appVersionProvider);
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -162,14 +164,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
           ),
 
           // 4 ─ Version caption (100 dp from bottom)
-          const Positioned(
+          Positioned(
             bottom: 100,
             left: 0,
             right: 0,
             child: Text(
-              'v 1.0.0 · 2025',
+              'v $version · 2025',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 10,
                 color: AppColors.text3,

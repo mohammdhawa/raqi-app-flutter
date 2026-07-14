@@ -8,6 +8,7 @@
 ///   "body": "تم اعتماد المستند #1234 من قبل المدير",
 ///   "type": "approval",
 ///   "data": { "document_id": 1234 },
+///   "broadcast_id": null,
 ///   "read_at": null,
 ///   "created_at": "2026-05-17T10:30:00.000000Z"
 /// }
@@ -20,6 +21,7 @@ class AppNotification {
     required this.type,
     required this.createdAt,
     this.data = const {},
+    this.broadcastId,
     this.readAt,
   });
 
@@ -28,11 +30,21 @@ class AppNotification {
   final String body;
   final NotificationType type;
   final Map<String, dynamic> data;
+
+  /// Stable id of the admin broadcast this notification belongs to, or `null`
+  /// for regular (non-broadcast) notifications. Present on both the FCM data
+  /// payload and the `GET /notifications` list.
+  final String? broadcastId;
   final DateTime? readAt;
   final DateTime createdAt;
 
   bool get isRead => readAt != null;
   bool get isUnread => readAt == null;
+
+  /// True when this notification is an admin broadcast — identified by a
+  /// non-null [broadcastId] (the added list field) or the `broadcast` type.
+  bool get isBroadcast =>
+      broadcastId != null || type == NotificationType.broadcast;
 
   /// Extracts `document_id` from the `data` map when the notification
   /// type is [NotificationType.document] or [NotificationType.approval].
@@ -57,6 +69,7 @@ class AppNotification {
         body: body,
         type: type,
         data: data,
+        broadcastId: broadcastId,
         readAt: readAt ?? DateTime.now(),
         createdAt: createdAt,
       );
@@ -68,6 +81,7 @@ class AppNotification {
       body: json['body'] as String? ?? '',
       type: NotificationType.fromString(json['type'] as String?),
       data: (json['data'] as Map<String, dynamic>?) ?? const {},
+      broadcastId: json['broadcast_id'] as String?,
       readAt: json['read_at'] != null
           ? DateTime.tryParse(json['read_at'] as String)
           : null,
@@ -83,6 +97,7 @@ enum NotificationType {
   rejection,
   leave,
   attendanceCheckoutReminder,
+  broadcast,
   general;
 
   static NotificationType fromString(String? raw) {
@@ -98,6 +113,8 @@ enum NotificationType {
         return NotificationType.leave;
       case 'attendance_checkout_reminder':
         return NotificationType.attendanceCheckoutReminder;
+      case 'broadcast':
+        return NotificationType.broadcast;
       case 'general':
         return NotificationType.general;
       default:

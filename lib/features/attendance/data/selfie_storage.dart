@@ -17,8 +17,18 @@ import 'package:path_provider/path_provider.dart';
 /// Subdirectory (relative to app-support) that persisted selfies live in.
 const selfiesSubdir = 'attendance_selfies';
 
-/// Copies a freshly-captured selfie out of the picker's cache into permanent
-/// app-support storage and returns the path to store on the queue row.
+/// Capture limits used before an attendance selfie enters the offline queue.
+///
+/// 1600 px on the long edge keeps enough facial detail for a human attendance
+/// reviewer while avoiding the multi-megapixel files produced by modern front
+/// cameras. JPEG quality 85 is intentionally conservative: resizing provides
+/// most of the size reduction without introducing distracting face artifacts.
+const attendanceSelfieMaxDimension = 1600.0;
+const attendanceSelfieJpegQuality = 85;
+
+/// Copies a freshly-captured, capture-time-compressed selfie out of the
+/// picker's cache into permanent app-support storage and returns the path to
+/// store on the queue row.
 ///
 /// The returned path is RELATIVE to the app-support directory (e.g.
 /// `attendance_selfies/1720000000000_1a2b.jpg`), not absolute — see
@@ -55,7 +65,8 @@ Future<String> persistSelfieForUpload(File source, {Directory? baseDir}) async {
 /// against the current support dir survives that rotation. Legacy rows (from
 /// the old cache-path behavior) and test fakes hold absolute paths; those are
 /// returned unchanged and simply fail the existence check if truly gone.
-Future<String> resolveSelfiePath(String selfiePath, {Directory? baseDir}) async {
+Future<String> resolveSelfiePath(String selfiePath,
+    {Directory? baseDir}) async {
   if (_isAbsolutePath(selfiePath)) return selfiePath;
   final supportDir = baseDir ?? await getApplicationSupportDirectory();
   return '${supportDir.path}${Platform.pathSeparator}$selfiePath';

@@ -98,9 +98,12 @@ class _DocumentDetailsScreenState
 
   bool _canDelete(Document? doc, dynamic user) {
     if (doc == null || user == null) return false;
+    // Deletable through the whole pending phase — a manager approving an
+    // intermediate step no longer blocks it; only the chief's final
+    // decision (approved/rejected) does. Mirrors DELETE /api/documents/{id}.
     if (doc.status != DocumentStatus.pending) return false;
     if (doc.creator.id != user.id) return false;
-    return doc.workflows.every((s) => s.status == WorkflowStepStatus.pending);
+    return true;
   }
 
   Future<void> _confirmAndDelete() async {
@@ -378,8 +381,27 @@ class _DetailsBodyState extends State<_DetailsBody> {
       return const Center(child: CircularProgressIndicator());
     }
     if (widget.state.error != null && widget.state.document == null) {
-      return ErrorStateView(
-          failure: widget.state.error!, onRetry: widget.onRefresh);
+      final failure = widget.state.error!;
+      // A 404 here means the document is gone — e.g. it was deleted by its
+      // creator (while still pending) and then re-opened from a lingering
+      // notification. Show a clear "no longer exists" state instead of a
+      // generic connection error with a retry that can never succeed.
+      final isMissing = failure.statusCode == 404 ||
+          failure.code == ApiErrorCode.notFound ||
+          failure.code == ApiErrorCode.routeNotFound;
+      if (isMissing) {
+        return EmptyStateView(
+          icon: Icons.delete_outline,
+          title: 'هذا المستند لم يعد موجوداً',
+          subtitle: 'ربما تم حذفه. يمكنك العودة إلى القائمة.',
+          action: OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: const Icon(Icons.chevron_right, size: 18),
+            label: const Text('رجوع'),
+          ),
+        );
+      }
+      return ErrorStateView(failure: failure, onRetry: widget.onRefresh);
     }
     final doc = widget.state.document;
     if (doc == null) {
