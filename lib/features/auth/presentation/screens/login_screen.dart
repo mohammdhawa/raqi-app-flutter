@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/errors/api_failure.dart';
 import '../../../../core/providers/app_info_provider.dart';
+import '../../../../core/storage/token_storage.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../providers/auth_controller.dart';
 
@@ -44,6 +45,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final emailFieldError = failure.firstErrorFor('email');
       setState(() {
         _errorMessage = emailFieldError ?? failure.message;
+      });
+    } on TokenStorageException {
+      // Credentials were fine; the device could not store the session. Say so,
+      // because retrying the same password will not help.
+      setState(() {
+        _errorMessage =
+            'تعذر حفظ الجلسة على هذا الجهاز. الرجاء إعادة تشغيل التطبيق '
+            'والمحاولة مرة أخرى.';
       });
     } catch (_) {
       setState(() {

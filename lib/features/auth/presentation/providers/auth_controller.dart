@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/api_client.dart';
@@ -37,35 +40,84 @@ class AuthController extends StateNotifier<AuthState> {
   final UnauthenticatedSignal _unauthenticatedSignal;
   final PushNotificationService _pushService;
 
+  static const _bootstrapTimeout = Duration(seconds: 10);
+
+  /// Resolves the stored session on start-up.
+  ///
+  /// This *must* always land on a terminal state: the splash screen and the
+  /// router both block on leaving [AuthInitial], so anything that escapes here
+  /// leaves the app spinning on the splash forever. Restoring can genuinely
+  /// fail (e.g. Android secure storage becoming undecryptable after an app
+  /// update), so treat any failure as "no session" and send the user to login.
   Future<void> _bootstrap() async {
-    final user = await _repo.restoreSession();
-    if (user != null) {
-      state = AuthAuthenticated(user);
-      // Re-register FCM token on session restore (token may have rotated)
-      await _pushService.registerToken();
-      _pushService.listenForTokenRefresh();
-    } else {
+    User? user;
+    try {
+      // Reading secure storage is local and takes milliseconds; the timeout is
+      // purely a deadlock guard so a wedged platform channel can't hold the
+      // splash screen open indefinitely.
+      user = await _repo.restoreSession().timeout(_bootstrapTimeout);
+    } catch (e, st) {
+      debugPrint('Session restore failed, falling back to login: $e\n$st');
+      user = null;
+    }
+
+    if (user == null) {
       state = const AuthUnauthenticated();
+      return;
+    }
+
+    state = AuthAuthenticated(user);
+
+    // Re-register the FCM token on session restore (it may have rotated).
+    // Deliberately not awaited as part of resolving auth — it hits Play
+    // Services and the network, neither of which should gate the splash.
+    _startPushSession();
+  }
+
+  /// Opens the push session in the background.
+  ///
+  /// Nothing here waits for it, and nothing needs to: ordering against a
+  /// later logout is enforced inside the push service, which invalidates
+  /// stale registrations and queues its requests, rather than by holding a
+  /// future here and hoping it finishes first.
+  void _startPushSession() {
+    unawaited(_openPushSession());
+  }
+
+  /// Best-effort push registration; never allowed to surface as an error.
+  Future<void> _openPushSession() async {
+    try {
+      await _pushService.beginSession();
+    } catch (e) {
+      debugPrint('FCM session registration failed: $e');
     }
   }
 
   Future<void> login(String email, String password) async {
     final result = await _repo.login(email: email, password: password);
     state = AuthAuthenticated(result.user);
-    // Register FCM token after login
-    await _pushService.registerToken();
-    _pushService.listenForTokenRefresh();
+    // Register the FCM token after login — off the critical path so a slow or
+    // unavailable Play Services can't stall (or fail) an otherwise good login.
+    _startPushSession();
   }
 
   Future<void> logout() async {
-    // Remove FCM token before logout
-    await _pushService.removeToken();
+    // Closes the push session before anything else: it invalidates any
+    // registration still in flight and sends the DELETE behind requests
+    // already issued, so this device cannot end up re-registered to the
+    // account we are signing out of.
+    await _pushService.endSession();
     await _repo.logout();
     state = const AuthUnauthenticated();
   }
 
   void _onForcedLogout() {
     // Triggered by the API client on a 401 — token is already cleared.
+    // Invalidate rather than end the push session: stale registrations and
+    // token refreshes still have to be stopped, but we have no credentials
+    // left to authorise a DELETE, and attempting one from here would 401 and
+    // re-enter this very method. See PushNotificationService.invalidateSession.
+    _pushService.invalidateSession();
     state = const AuthUnauthenticated();
   }
 

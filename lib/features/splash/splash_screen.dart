@@ -56,7 +56,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       },
     );
     // Already resolved?
-    if (ref.read(authControllerProvider) is! AuthInitial) {
+    if (ref.read(authControllerProvider) is! AuthInitial &&
+        !authReady.isCompleted) {
       authReady.complete();
     }
 
