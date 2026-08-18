@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto-backup rules for Android 11 (API 30) and below.
+
+  The encrypted auth token lives in the "FlutterSecureStorage" shared-prefs
+  file, but the AndroidX master key that decrypts it is held in the hardware
+  keystore and is never included in a backup. Restoring the ciphertext onto a
+  fresh install therefore produces data the app cannot decrypt, and the read
+  throws instead of returning null. Exclude it so a restored install simply
+  starts signed out.
+
+  "FlutterSecureKeyStorage" is the plugin's other prefs file — it holds the
+  AES key wrapped by an RSA key that also lives only in the keystore. The
+  plugin initialises that cipher even when encryptedSharedPreferences is on,
+  so the file exists either way. Backing up a wrapped key whose wrapping key
+  cannot be restored has no upside; exclude it for the same reason.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="FlutterSecureStorage.xml" />
+    <exclude domain="sharedpref" path="FlutterSecureKeyStorage.xml" />
+</full-backup-content>

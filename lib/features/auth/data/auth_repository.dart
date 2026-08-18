@@ -53,9 +53,16 @@ class AuthRepository {
     final token = data['token'] as String;
     final user = User.fromJson(data['user'] as Map<String, dynamic>);
 
-    await _storage.write(token);
+    // One atomic write: a half-stored session is worse than none, because the
+    // API client re-reads the token on every request and would hand the user a
+    // working-looking screen that 401s on its first call. writeSession()
+    // guarantees all-or-nothing, so a TokenStorageException here means nothing
+    // was kept — let it reach the login screen.
+    await _storage.writeSession(
+      token: token,
+      userJson: jsonEncode(user.toJson()),
+    );
 
-    await _storage.writeUserJson(jsonEncode(user.toJson()));
     return AuthResult(user: user, token: token);
   }
 
@@ -77,7 +84,13 @@ class AuthRepository {
     final token = await _storage.read();
     if (token == null || token.isEmpty) return null;
     final userJson = await _storage.readUserJson();
-    if (userJson == null) return null;
+    if (userJson == null) {
+      // Half a session — most likely one key survived a corruption wipe. The
+      // token would still be attached to every request on behalf of a user we
+      // cannot reconstruct, so drop it rather than leave it lying around.
+      await _storage.clear();
+      return null;
+    }
     try {
       return User.fromJson(jsonDecode(userJson) as Map<String, dynamic>);
     } catch (_) {

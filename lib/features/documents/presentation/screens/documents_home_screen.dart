@@ -9,7 +9,7 @@ import '../../data/documents_repository.dart';
 import '../providers/documents_list_controller.dart';
 import '../widgets/document_list_item.dart';
 import '../../../../shared/widgets/state_views.dart';
-import '../../../notifications/presentation/providers/notifications_controller.dart';
+import '../../../notifications/presentation/widgets/notification_bell_icon.dart';
 
 // All filter values in display order.
 const _kStatusFilters = DocumentStatusFilter.values;
@@ -215,7 +215,7 @@ class _AppBarSection extends StatelessWidget {
                         onTap: onLogout,
                       ),
                       const SizedBox(width: 8),
-                      const _NotificationHeaderBtn(),
+                      const NotificationBellIcon(),
                       if (user != null && user.attendanceCheck) ...[
                         const SizedBox(width: 8),
                         _HeaderIconBtn(
@@ -312,76 +312,6 @@ class _HeaderIconBtn extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(icon, color: Colors.white, size: 20),
-      ),
-    );
-  }
-}
-
-/// Notification bell button with an unread-count badge.
-/// Uses [Consumer] so only this widget rebuilds when the count changes.
-class _NotificationHeaderBtn extends ConsumerWidget {
-  const _NotificationHeaderBtn();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final count = ref.watch(unreadCountProvider);
-
-    return GestureDetector(
-      onTap: () => context.push('/notifications'),
-      child: SizedBox(
-        width: 36,
-        height: 36,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.notifications_outlined,
-                color: Colors.white,
-                size: 20,
-              ),
-            ),
-            if (count > 0)
-              Positioned(
-                top: -4,
-                left: -4,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.rejected,
-                    borderRadius: BorderRadius.circular(AppColors.pill),
-                    border: Border.all(
-                      color: AppColors.primary,
-                      width: 1.5,
-                    ),
-                  ),
-                  constraints: const BoxConstraints(
-                    minWidth: 18,
-                    minHeight: 18,
-                  ),
-                  child: Center(
-                    child: Text(
-                      count > 99 ? '99+' : '$count',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
       ),
     );
   }

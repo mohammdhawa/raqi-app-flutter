@@ -27,6 +27,11 @@ android/key.properties
 *.jks
 *.keystore
 
+# Claude Code — machine-local settings (absolute paths, per-machine
+# tool permissions). The shared .claude/settings.json stays tracked.
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
 # iOS
 ios/Pods/
 ios/.symlinks/

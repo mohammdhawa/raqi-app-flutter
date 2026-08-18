@@ -7,6 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/user.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
+import '../../../notifications/presentation/widgets/notification_bell_icon.dart';
 import '../../domain/attendance_record.dart';
 import '../../domain/attendance_window.dart';
 import '../../domain/pending_attendance_record.dart' show AttendanceSyncStatus;
@@ -263,6 +264,8 @@ class _AttendanceHeader extends StatelessWidget {
                     icon: Icons.arrow_forward_ios_rounded,
                     onTap: () => context.pop(),
                   ),
+                const SizedBox(width: 8),
+                const NotificationBellIcon(),
                 if (user?.canViewAttendance == true) ...[
                   const SizedBox(width: 8),
                   _HeaderIconBtn(

@@ -1,7 +1,7 @@
 name: doc_approval
 description: Document Approval Workflow mobile app.
 publish_to: "none"
-version: 1.0.7+8
+version: 1.0.8+9
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -35,6 +35,7 @@ dependencies:
   # UI / Fonts
   google_fonts: ^6.2.1
   cached_network_image: ^3.3.1
+  cupertino_icons: ^1.0.8
 
   # Files
   file_picker: ^8.0.3
