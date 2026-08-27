@@ -76,8 +76,26 @@ class AttendanceController extends StateNotifier<AttendanceControllerState> {
   /// win, briefly reverting [AttendanceControllerState.remoteTodayRecords].
   bool _isLoading = false;
 
-  Future<void> _bootstrap() async {
-    if (_isLoading) return;
+  /// Set when a FORCED reload arrives while a fetch is already in flight, so
+  /// it is re-run afterwards instead of being dropped.
+  ///
+  /// Coalescing an ordinary refresh into the in-flight one is right — they
+  /// would fetch the same thing. A forced reload is different in kind: it
+  /// exists because the SERVER state changed underneath us (HR refused a
+  /// record), and the response already on the wire was requested before that
+  /// happened, so it cannot contain the change. Dropping it leaves a refused
+  /// check-in driving the button, and the employee cannot do the one thing
+  /// their notification asked of them until they cold-start the app.
+  ///
+  /// One flag, not a counter: any number of forced reloads that arrive during
+  /// a fetch are satisfied by a single re-run afterwards.
+  bool _reloadRequested = false;
+
+  Future<void> _bootstrap({bool force = false}) async {
+    if (_isLoading) {
+      if (force) _reloadRequested = true;
+      return;
+    }
     _isLoading = true;
     try {
       final page = await _repo.myRecords(page: 1);
@@ -95,19 +113,40 @@ class AttendanceController extends StateNotifier<AttendanceControllerState> {
       state = state.copyWith(isBootstrapping: false);
     } finally {
       _isLoading = false;
+      // Runs even when the body returned early on `!mounted`; the re-entry
+      // then does nothing, because it checks mounted too.
+      if (_reloadRequested && mounted) {
+        _reloadRequested = false;
+        unawaited(_bootstrap(force: true));
+      } else {
+        _reloadRequested = false;
+      }
     }
   }
 
   /// Re-fetches today's records from the server on app resume so a night spent
   /// in the background doesn't leave yesterday's records driving this morning's
-  /// status. Resume fires on every task switch, so this refetches only when the
-  /// calendar day has actually changed since the last successful load.
-  Future<void> refreshToday() {
-    if (_lastLoadedDay != null && _lastLoadedDay == _dayOf(DateTime.now())) {
+  /// status. Resume fires on every task switch, so by default this refetches
+  /// only when the calendar day has actually changed since the last successful
+  /// load.
+  ///
+  /// Pass [force] when something the app did not initiate has changed what the
+  /// server will accept — an HR refusal is the case that matters: it happens
+  /// on today's date, so the same-day guard would skip it, and the employee
+  /// would keep seeing the refused check-in drive their status until a cold
+  /// start. Everything they were asked to do depends on this refetch.
+  Future<void> refreshToday({bool force = false}) {
+    if (!force &&
+        _lastLoadedDay != null &&
+        _lastLoadedDay == _dayOf(DateTime.now())) {
       return Future.value();
     }
-    return _bootstrap();
+    return _bootstrap(force: force);
   }
+
+  /// Unconditional refetch of today's records. Shorthand for
+  /// `refreshToday(force: true)`, for callers that only ever mean "now".
+  Future<void> reload() => refreshToday(force: true);
 
   /// Runs the full capture flow for [type] (the action the user tapped —
   /// "تسجيل حضور" or "تسجيل انصراف"): GPS fix, front-camera selfie, then
@@ -327,7 +366,16 @@ AttendanceType? resolveAttendanceStatus({
 
   AttendanceRecord? latestRemote;
   for (final r in remoteRecords) {
-    if (r.isMissingCheckout || !_isSameLocalDay(r.recordedAt, today)) continue;
+    // A refused record is excluded for the same reason a missing_checkout one
+    // is: the server no longer treats it as attendance. Letting a refused
+    // check-in govern status would leave the app offering "check out" against
+    // a check-in the backend cannot see, so every attempt would 422 — and the
+    // employee, who was told to record the day again, would have no way to.
+    if (r.isRejected ||
+        r.isMissingCheckout ||
+        !_isSameLocalDay(r.recordedAt, today)) {
+      continue;
+    }
     if (latestRemote == null || r.recordedAt.isAfter(latestRemote.recordedAt)) {
       latestRemote = r;
     }
@@ -338,10 +386,11 @@ AttendanceType? resolveAttendanceStatus({
     if (r.isFailed || !_isSameLocalDay(r.recordedAt, today)) continue;
     // Skip a local record the server already knows about: the remote copy is
     // authoritative and was already considered above — including being
-    // excluded when the backend auto-closed it as missing_checkout. Without
-    // this, a synced local check-in (the queue keeps synced rows) keeps
-    // driving status even after the server closed the day, so the UI wrongly
-    // keeps the user "checked in" and offers a checkout the server rejects.
+    // excluded when the backend auto-closed it as missing_checkout, or when HR
+    // refused it. Without this, a synced local check-in (the queue keeps synced
+    // rows) keeps driving status even after the server closed or refused the
+    // day, so the UI wrongly keeps the user "checked in" and offers a checkout
+    // the server rejects.
     if (_hasRemoteTwin(r, remoteRecords)) continue;
     if (latestLocal == null || r.recordedAt.isAfter(latestLocal.recordedAt)) {
       latestLocal = r;

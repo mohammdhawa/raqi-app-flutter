@@ -27,20 +27,6 @@ class LeaveRequestDetailScreen extends ConsumerStatefulWidget {
 
 class _LeaveRequestDetailScreenState
     extends ConsumerState<LeaveRequestDetailScreen> {
-  @override
-  void initState() {
-    super.initState();
-    // Cold start (e.g. terminated-app notification tap): make sure both
-    // lists are loaded so the lookup can resolve the request.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final found = ref.read(leaveRequestByIdProvider(widget.leaveRequestId));
-      if (found == null) {
-        ref.read(myLeaveRequestsProvider.notifier).refresh();
-        ref.read(leaveApprovalsProvider.notifier).refresh();
-      }
-    });
-  }
-
   Future<void> _review(LeaveStatus status) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -52,8 +38,9 @@ class _LeaveRequestDetailScreenState
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
-          backgroundColor:
-              status == LeaveStatus.approved ? AppColors.approved : AppColors.rejected,
+          backgroundColor: status == LeaveStatus.approved
+              ? AppColors.approved
+              : AppColors.rejected,
           content: Text(
             status == LeaveStatus.approved
                 ? 'تم اعتماد طلب الإجازة.'
@@ -69,7 +56,8 @@ class _LeaveRequestDetailScreenState
       messenger.showSnackBar(
         SnackBar(
           backgroundColor: AppColors.rejected,
-          content: Text(arabicMessageFor(failure.code, fallback: failure.message)),
+          content:
+              Text(arabicMessageFor(failure.code, fallback: failure.message)),
         ),
       );
     }
@@ -108,14 +96,14 @@ class _LeaveRequestDetailScreenState
 
   @override
   Widget build(BuildContext context) {
-    final request = ref.watch(leaveRequestByIdProvider(widget.leaveRequestId));
+    // Resolved independently of the lists' status filters — a notification
+    // must open its request whatever the user last filtered by.
+    final requestAsync =
+        ref.watch(leaveRequestDetailProvider(widget.leaveRequestId));
+    final request = requestAsync.valueOrNull;
     final user = ref.watch(currentUserProvider);
     final isReviewing = ref.watch(leaveApprovalsProvider
         .select((s) => s.reviewingIds.contains(widget.leaveRequestId)));
-    // Has either list finished an attempt? Used to decide loading vs not-found.
-    final myLoaded = ref.watch(myLeaveRequestsProvider.select((s) => s.hasLoadedOnce));
-    final approvalsLoaded =
-        ref.watch(leaveApprovalsProvider.select((s) => s.hasLoadedOnce));
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -128,29 +116,54 @@ class _LeaveRequestDetailScreenState
           icon: const Icon(Icons.chevron_right),
         ),
       ),
-      body: _buildBody(request, myLoaded && approvalsLoaded),
+      body: _buildBody(requestAsync),
       bottomNavigationBar: _buildActions(request, user?.id, isReviewing),
     );
   }
 
-  Widget _buildBody(LeaveRequest? request, bool loadedBoth) {
+  Widget _buildBody(AsyncValue<LeaveRequest?> requestAsync) {
+    final request = requestAsync.valueOrNull;
+
     if (request == null) {
-      if (!loadedBoth) {
+      if (requestAsync.isLoading) {
         return const Center(
           child: CircularProgressIndicator(color: AppColors.primary),
         );
       }
+      // A lookup that failed (offline) is not the same as one that found
+      // nothing — offering a retry on the first and not the second is the
+      // difference between "try again" and "stop trying".
+      final failure = requestAsync.error;
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.search_off_rounded,
-                  size: 56, color: AppColors.text3),
+              Icon(
+                failure == null
+                    ? Icons.search_off_rounded
+                    : Icons.wifi_off_rounded,
+                size: 56,
+                color: AppColors.text3,
+              ),
               const SizedBox(height: 14),
-              Text('تعذّر العثور على طلب الإجازة.',
-                  style: AppTheme.title(color: AppColors.text2)),
+              Text(
+                failure is ApiFailure
+                    ? arabicMessageFor(failure.code, fallback: failure.message)
+                    : failure != null
+                        ? 'تعذّر تحميل طلب الإجازة.'
+                        : 'تعذّر العثور على طلب الإجازة.',
+                textAlign: TextAlign.center,
+                style: AppTheme.title(color: AppColors.text2),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () => ref.invalidate(
+                    leaveRequestDetailProvider(widget.leaveRequestId)),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('إعادة المحاولة'),
+              ),
             ],
           ),
         ),
@@ -158,6 +171,12 @@ class _LeaveRequestDetailScreenState
     }
 
     final df = DateFormat('yyyy/MM/dd');
+    // The stored label, falling back to the cached vocabulary when the row
+    // carries an id but no text. Never parsed for meaning — see LeaveRequestTile.
+    final typeLabel = (request.leaveType?.isNotEmpty ?? false)
+        ? request.leaveType
+        : ref.watch(leaveTypeByIdProvider(request.leaveTypeId))?.label;
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
       children: [
@@ -168,6 +187,13 @@ class _LeaveRequestDetailScreenState
             LeaveStatusChip(status: request.status, large: true),
           ],
         ),
+        // An approved leave the employee never submitted needs an explanation
+        // on the screen they land on from the notification, not just a status
+        // chip that reads like any other approval.
+        if (request.isExcuse) ...[
+          const SizedBox(height: 14),
+          const _ExcuseBanner(),
+        ],
         const SizedBox(height: 16),
         _InfoRow(
           icon: Icons.login_rounded,
@@ -184,11 +210,20 @@ class _LeaveRequestDetailScreenState
           label: 'أيام العمل المحسوبة',
           value: '${request.days} ${request.days == 1 ? "يوم" : "أيام"}',
         ),
-        if (request.leaveType != null && request.leaveType!.isNotEmpty)
+        _InfoRow(
+          icon: request.deductsBalance
+              ? Icons.remove_circle_outline
+              : Icons.verified_outlined,
+          label: 'أثر الرصيد',
+          value: request.deductsBalance
+              ? 'تُخصم من الرصيد'
+              : 'لا تُخصم من الرصيد',
+        ),
+        if (typeLabel != null)
           _InfoRow(
             icon: Icons.label_outline,
             label: 'نوع الإجازة',
-            value: request.leaveType!,
+            value: typeLabel,
           ),
         if (request.managerName != null)
           _InfoRow(
@@ -221,12 +256,25 @@ class _LeaveRequestDetailScreenState
     );
   }
 
-  Widget? _buildActions(LeaveRequest? request, int? currentUserId, bool isReviewing) {
+  Widget? _buildActions(
+      LeaveRequest? request, int? currentUserId, bool isReviewing) {
     if (request == null || !request.isPending) return null;
     // Only the assigned approving manager may act.
     final canReview =
         currentUserId != null && request.managerId == currentUserId;
     if (!canReview) return null;
+
+    // A legacy row that names its own author as approver. Submission-side
+    // enforcement only covers rows created after it shipped, so requests
+    // stored before it still exist and still reach this screen — and the
+    // review gate is a bare `manager_id == caller` equality that they pass.
+    //
+    // The backend refuses to APPROVE them (ReviewLeaveRequest's status rule)
+    // but deliberately leaves REJECT open, so the person holding the row can
+    // still close it out rather than being stranded behind a gate nobody can
+    // pass. The UI mirrors exactly that: reject stays, approve goes.
+    final isSelfAssigned =
+        request.requesterId != null && request.requesterId == request.managerId;
 
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -248,32 +296,81 @@ class _LeaveRequestDetailScreenState
                 ),
               ),
             )
-          : Row(
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _confirmAndReview(LeaveStatus.rejected),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.rejected,
-                      side: const BorderSide(color: AppColors.rejected, width: 1.5),
-                      minimumSize: const Size.fromHeight(48),
+                if (isSelfAssigned) ...[
+                  Container(
+                    key: const Key('leave-self-approval-notice'),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.rejectedBg,
+                      borderRadius: BorderRadius.circular(AppColors.rLg),
+                      border: Border.all(
+                        color: AppColors.rejected.withValues(alpha: 0.3),
+                      ),
                     ),
-                    icon: const Icon(Icons.close_rounded, size: 20),
-                    label: const Text('رفض'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _confirmAndReview(LeaveStatus.approved),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.approved,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size.fromHeight(48),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.info_outline,
+                            size: 16, color: AppColors.rejected),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'لا يمكن اعتماد طلب إجازة مقدَّمه هو نفسه معتمِده. '
+                            'يمكن رفض الطلب فقط.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.rejected,
+                              fontWeight: FontWeight.w600,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    icon: const Icon(Icons.check_rounded, size: 20),
-                    label: const Text('اعتماد'),
                   ),
+                  const SizedBox(height: 12),
+                ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () =>
+                            _confirmAndReview(LeaveStatus.rejected),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.rejected,
+                          side: const BorderSide(
+                              color: AppColors.rejected, width: 1.5),
+                          minimumSize: const Size.fromHeight(48),
+                        ),
+                        icon: const Icon(Icons.close_rounded, size: 20),
+                        label: const Text('رفض'),
+                      ),
+                    ),
+                    // Approve is dropped entirely rather than disabled: a
+                    // greyed-out button invites tapping it to find out why,
+                    // and the notice above already gives the reason.
+                    if (!isSelfAssigned) ...[
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          key: const Key('leave-approve-button'),
+                          onPressed: () =>
+                              _confirmAndReview(LeaveStatus.approved),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.approved,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size.fromHeight(48),
+                          ),
+                          icon: const Icon(Icons.check_rounded, size: 20),
+                          label: const Text('اعتماد'),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
@@ -281,8 +378,52 @@ class _LeaveRequestDetailScreenState
   }
 }
 
+/// Explains an approved leave the employee never asked for: HR recorded it to
+/// justify a day they were marked absent. There is no review step on one of
+/// these, so the approve/reject bar never appears either.
+class _ExcuseBanner extends StatelessWidget {
+  const _ExcuseBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.accentTint,
+        borderRadius: BorderRadius.circular(AppColors.rLg),
+        border: Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.assignment_ind_outlined,
+              size: 20, color: AppColors.accent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('عذر مسجّل من الموارد البشرية',
+                    style: AppTheme.label()),
+                const SizedBox(height: 4),
+                Text(
+                  'سُجّل هذا العذر نيابةً عنك لتبرير غياب، ولم يُقدَّم كطلب '
+                  'إجازة، لذلك لا يحتاج إلى موافقة.',
+                  style: AppTheme.bodyS(color: AppColors.text2),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.icon, required this.label, required this.value});
+  const _InfoRow(
+      {required this.icon, required this.label, required this.value});
 
   final IconData icon;
   final String label;

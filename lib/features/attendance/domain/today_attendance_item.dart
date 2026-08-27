@@ -11,6 +11,8 @@ class TodayAttendanceItem {
     required this.recordedAt,
     required this.status,
     this.isMissingCheckout = false,
+    this.isRejected = false,
+    this.rejectionMessage,
     this.workHours,
     this.errorMessage,
     this.localId,
@@ -22,6 +24,10 @@ class TodayAttendanceItem {
         recordedAt: record.recordedAt,
         status: AttendanceSyncStatus.synced,
         isMissingCheckout: record.isMissingCheckout,
+        isRejected: record.isRejected,
+        rejectionMessage: record.isRejected
+            ? _rejectionMessage(record)
+            : null,
         workHours: record.workHours,
       );
 
@@ -44,6 +50,14 @@ class TodayAttendanceItem {
   /// closed the day, so it must render as incomplete, not a full day.
   final bool isMissingCheckout;
 
+  /// HR refused this record. The row is still listed — the employee was
+  /// notified about it and needs to find it — but it must never read as an
+  /// attendance record that counts.
+  final bool isRejected;
+
+  /// Why it was refused, ready to display. `null` unless [isRejected].
+  final String? rejectionMessage;
+
   /// Worked hours on a checkout row, if the server computed them.
   final double? workHours;
 
@@ -54,4 +68,15 @@ class TodayAttendanceItem {
   /// Local-queue row id — present only for queued (non-remote) entries, so
   /// a rejected one can be dismissed.
   final int? localId;
+}
+
+/// The refusal, phrased for the employee — the same sentence the push
+/// notification carried, so the row and the notification agree.
+String _rejectionMessage(AttendanceRecord record) {
+  final what = record.type == AttendanceType.checkOut ? 'انصرافك' : 'حضورك';
+  final note = record.rejectionNote == null || record.rejectionNote!.isEmpty
+      ? ''
+      : ' ملاحظة: ${record.rejectionNote}';
+
+  return 'لم يتم قبول تسجيل $what: ${record.rejectionReasonLabel}.$note';
 }

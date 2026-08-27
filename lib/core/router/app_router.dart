@@ -99,7 +99,21 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: 'history',
-                builder: (_, __) => const AttendanceHistoryScreen(),
+                // `?date=YYYY-MM-DD` opens the listing on a single day — how
+                // an `attendance_rejected` notification for an earlier date
+                // lands on the day it is about. A malformed value is ignored
+                // rather than failing the route: the unfiltered history is
+                // still the right screen.
+                builder: (context, state) {
+                  final raw = state.uri.queryParameters['date'];
+                  final parsed =
+                      raw == null ? null : DateTime.tryParse(raw);
+                  return AttendanceHistoryScreen(
+                    initialDate: parsed == null
+                        ? null
+                        : DateTime(parsed.year, parsed.month, parsed.day),
+                  );
+                },
               ),
               GoRoute(
                 path: 'leave',

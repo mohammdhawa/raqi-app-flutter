@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../../../core/errors/api_failure.dart';
+import '../../../../core/errors/error_log.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/user.dart';
 import '../../data/documents_repository.dart';
@@ -12,6 +13,7 @@ import '../../domain/document.dart';
 import '../../domain/document_template.dart';
 import '../providers/documents_list_controller.dart';
 import '../widgets/approver_picker_sheet.dart';
+import '../widgets/approver_validation.dart';
 import '../widgets/attachments_field.dart';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -44,7 +46,13 @@ class _GeneratedDocumentFormScreenState
   String? _formError;
   String? _exportError;
   String? _importError;
+  String? _approverError;
   Map<String, String> _fieldApiErrors = {};
+
+  /// Set when the server rejected one of the chosen approvers. Blocks submit
+  /// until the user has re-opened the picker (which re-reads `/managers`)
+  /// and confirmed the corrected list.
+  bool _approversNeedConfirmation = false;
 
   /// Dynamic field controllers — keyed by field key from schema.
   final Map<String, TextEditingController> _fieldControllers = {};
@@ -84,7 +92,8 @@ class _GeneratedDocumentFormScreenState
     if (!mounted) return;
     setState(() => _isLoadingCounters = true);
     try {
-      final counters = await ref.read(documentsRepositoryProvider).fetchNextCounters();
+      final counters =
+          await ref.read(documentsRepositoryProvider).fetchNextCounters();
       if (!mounted) return;
       setState(() {
         _counters = counters;
@@ -156,7 +165,9 @@ class _GeneratedDocumentFormScreenState
           controller: _fieldControllers[key]!,
           hintText: field['label'] as String? ?? '',
           keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))
+          ],
           validator: required
               ? (v) =>
                   (v == null || v.trim().isEmpty) ? 'هذا الحقل مطلوب' : null
@@ -242,12 +253,20 @@ class _GeneratedDocumentFormScreenState
         },
       );
       if (result != null) {
-        setState(() => _approvers = result);
+        setState(() {
+          _approvers = result;
+          // Confirming the picker IS the confirmation of the refreshed list:
+          // the sheet re-reads `/managers` every time it opens, so whatever
+          // came back has just been checked against the live roster.
+          _approverError = null;
+          _approversNeedConfirmation = false;
+        });
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      logUnexpected('Approver picker failed to open', e, stackTrace);
       if (!mounted) return;
       setState(() {
-        _formError = 'تعذّر فتح نافذة اختيار المعتمدين: $e';
+        _formError = 'تعذّر فتح نافذة اختيار المعتمدين. حاول مرة أخرى.';
       });
     }
   }
@@ -281,17 +300,29 @@ class _GeneratedDocumentFormScreenState
       setState(() => _formError = 'الرجاء اختيار معتمد واحد على الأقل.');
       return;
     }
-
-    // When the counter is not initialized, export_number is required.
-    final exportText = _exportController.text.trim();
-    if (_counters != null && !_counters!.exportIsInitialized && exportText.isEmpty) {
-      setState(() => _exportError = 'يرجى إدخال رقم الصادر لتحديد نقطة البداية.');
+    // A previous attempt had an approver rejected. Re-sending before the user
+    // has looked at the corrected list would just fail the same way.
+    if (_approversNeedConfirmation) {
+      setState(() => _approverError ??=
+          'يرجى مراجعة قائمة المعتمدين وتأكيدها قبل الإرسال.');
       return;
     }
 
-    final exportNumber = exportText.isNotEmpty ? int.tryParse(exportText) : null;
+    // When the counter is not initialized, export_number is required.
+    final exportText = _exportController.text.trim();
+    if (_counters != null &&
+        !_counters!.exportIsInitialized &&
+        exportText.isEmpty) {
+      setState(
+          () => _exportError = 'يرجى إدخال رقم الصادر لتحديد نقطة البداية.');
+      return;
+    }
+
+    final exportNumber =
+        exportText.isNotEmpty ? int.tryParse(exportText) : null;
     final importText = _importController.text.trim();
-    final importNumber = importText.isNotEmpty ? int.tryParse(importText) : null;
+    final importNumber =
+        importText.isNotEmpty ? int.tryParse(importText) : null;
 
     setState(() => _isSubmitting = true);
     try {
@@ -321,6 +352,60 @@ class _GeneratedDocumentFormScreenState
       // Pop back through the template picker to the home screen.
       context.go('/');
     } on ApiFailure catch (failure) {
+      // ── The generation killswitch ──────────────────────────────────
+      //
+      // `config/document.php → generation_enabled` can be turned off at any
+      // time, and since backend v10 the endpoint actually enforces it: the
+      // request is refused with 403 `document_generation_disabled` before
+      // validation runs, so nothing was written and no export number was
+      // claimed. It is not a transient outage — it stays refused until an
+      // admin turns the feature back on — so there is nothing to retry, and
+      // the template this form was built from is now unusable.
+      if (failure.code == ApiErrorCode.documentGenerationDisabled) {
+        await _handleGenerationDisabled(failure);
+        return;
+      }
+
+      // Business rules the backend answers with their own code rather than a
+      // per-field `errors` map — both are about the export number, so both
+      // belong under that field rather than in the generic form banner.
+      if (failure.code == ApiErrorCode.duplicateExportNumber ||
+          failure.code == ApiErrorCode.counterNotInitialized) {
+        if (!mounted) return;
+        setState(() {
+          _exportError =
+              arabicMessageFor(failure.code, fallback: failure.message);
+          // A cold-start counter means the department has no starting point
+          // yet, so the field is now mandatory however it was prefilled —
+          // `/document-counters/next` evidently disagreed with the write
+          // path. Recording it as uninitialised (rather than clearing the
+          // counters, which would switch the client-side requirement OFF)
+          // marks the field required and shows the starting-number hint.
+          if (failure.code == ApiErrorCode.counterNotInitialized) {
+            _counters = DocumentCounters(
+              departmentId: _counters?.departmentId ?? 0,
+              exportIsInitialized: false,
+              importNextNumber: _counters?.importNextNumber,
+            );
+            _exportController.clear();
+          }
+        });
+        return;
+      }
+
+      // An approver was deleted or demoted between loading `/managers` and
+      // submitting. Drop the rejected entries and make the user re-pick.
+      final stale = resolveStaleApprovers(failure, _approvers);
+      if (stale != null) {
+        if (!mounted) return;
+        setState(() {
+          _approvers = stale.remaining;
+          _approverError = stale.message;
+          _approversNeedConfirmation = true;
+        });
+        return;
+      }
+
       final exportErr = failure.firstErrorFor('export_number');
       final importErr = failure.firstErrorFor('import_number');
 
@@ -330,8 +415,8 @@ class _GeneratedDocumentFormScreenState
       if (failure.fieldErrors != null) {
         for (final field in template.fieldsSchema) {
           final key = field['key'] as String;
-          final err = failure.firstErrorFor('field_values.$key')
-              ?? failure.firstErrorFor(key);
+          final err = failure.firstErrorFor('field_values.$key') ??
+              failure.firstErrorFor(key);
           if (err != null) newFieldErrors[key] = err;
         }
       }
@@ -351,16 +436,62 @@ class _GeneratedDocumentFormScreenState
           }).join('، ');
           _formError = 'يرجى مراجعة الحقول التالية: $labels';
         } else if (exportErr == null && importErr == null) {
-          _formError = arabicMessageFor(failure.code, fallback: failure.message);
+          _formError =
+              arabicMessageFor(failure.code, fallback: failure.message);
         }
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
+      // The exception text can carry a local file path or a Dio object's
+      // dump — diagnostics, not user copy, and not release-log material.
+      logUnexpected('Generated document submit failed', e, stackTrace);
+      if (!mounted) return;
       setState(() {
-        _formError = 'حدث خطأ غير متوقع: $e';
+        _formError = arabicMessageFor(ApiErrorCode.unknown);
       });
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  /// Generation was switched off server-side. Explains why, throws away the
+  /// form state built from a template that can no longer be used, and returns
+  /// to the documents list — where the plain file-upload flow still works.
+  /// Nothing is re-sent: the refusal stands until an admin re-enables it.
+  Future<void> _handleGenerationDisabled(ApiFailure failure) async {
+    if (!mounted) return;
+    setState(() {
+      _isSubmitting = false;
+      _formError = null;
+      _approvers = [];
+      _attachments = [];
+      _exportController.clear();
+      _importController.clear();
+      _counters = null;
+    });
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('إنشاء المستندات من القوالب متوقف'),
+          // The backend's message is the authoritative wording for this code.
+          content: Text(
+            '${arabicMessageFor(failure.code, fallback: failure.message)}\n\n'
+            'يمكنك إنشاء مستند برفع ملف بدلاً من ذلك.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('حسناً'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+    context.go('/');
   }
 
   // ── Build ──────────────────────────────────────────────────────────
@@ -408,7 +539,8 @@ class _GeneratedDocumentFormScreenState
                   ),
                   _StyledTextField(
                     controller: _descriptionController,
-                    hintText: 'وصف موجز يساعد المعتمدين على فهم سياق المستند...',
+                    hintText:
+                        'وصف موجز يساعد المعتمدين على فهم سياق المستند...',
                     multiline: true,
                     minLines: 3,
                   ),
@@ -418,7 +550,8 @@ class _GeneratedDocumentFormScreenState
                   _SectionHeader(
                     icon: Icons.outbox_outlined,
                     label: 'رقم الصادر',
-                    required: _counters != null && !_counters!.exportIsInitialized,
+                    required:
+                        _counters != null && !_counters!.exportIsInitialized,
                   ),
                   if (_isLoadingCounters)
                     const _NumbersLoadingRow()
@@ -431,7 +564,8 @@ class _GeneratedDocumentFormScreenState
                         FilteringTextInputFormatter.digitsOnly,
                       ],
                     ),
-                    if (_counters != null && !_counters!.exportIsInitialized) ...[
+                    if (_counters != null &&
+                        !_counters!.exportIsInitialized) ...[
                       const SizedBox(height: 6),
                       const _HintText(
                         'هذا أول مستند صادر في القسم — يرجى إدخال رقم البداية',
@@ -470,7 +604,8 @@ class _GeneratedDocumentFormScreenState
                   for (final field in template.fieldsSchema) ...[
                     _SectionHeader(
                       icon: _iconForFieldType(field['type'] as String),
-                      label: field['label'] as String? ?? field['key'] as String,
+                      label:
+                          field['label'] as String? ?? field['key'] as String,
                       required: field['required'] == true,
                     ),
                     _buildField(field),
@@ -489,8 +624,7 @@ class _GeneratedDocumentFormScreenState
                   AttachmentsField(
                     attachments: _attachments,
                     onPick: _pickAttachments,
-                    onRemove: (i) =>
-                        setState(() => _attachments.removeAt(i)),
+                    onRemove: (i) => setState(() => _attachments.removeAt(i)),
                   ),
                   const SizedBox(height: 6),
                   const _HintText(
@@ -606,6 +740,13 @@ class _GeneratedDocumentFormScreenState
                     ),
                   ),
 
+                  // Approver rejection — shown beside the selector it is
+                  // about, not in the generic form banner at the bottom.
+                  if (_approverError != null) ...[
+                    const SizedBox(height: 6),
+                    _FieldErrorText(_approverError!),
+                  ],
+
                   // Error message
                   if (_formError != null) ...[
                     const SizedBox(height: 16),
@@ -621,8 +762,7 @@ class _GeneratedDocumentFormScreenState
                       child: Row(
                         children: [
                           Icon(Icons.error_outline,
-                              size: 18,
-                              color: AppColors.rejected),
+                              size: 18, color: AppColors.rejected),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -915,7 +1055,8 @@ class _StyledTextField extends StatelessWidget {
       maxLines: multiline ? null : 1,
       minLines: minLines,
       maxLength: maxLength,
-      keyboardType: keyboardType ?? (multiline ? TextInputType.multiline : null),
+      keyboardType:
+          keyboardType ?? (multiline ? TextInputType.multiline : null),
       inputFormatters: inputFormatters,
       textDirection: TextDirection.rtl,
       textAlign: TextAlign.right,
@@ -980,8 +1121,7 @@ class _DatePickerField extends StatelessWidget {
         }
       },
       validator: required
-          ? (v) =>
-              (v == null || v.trim().isEmpty) ? 'هذا الحقل مطلوب' : null
+          ? (v) => (v == null || v.trim().isEmpty) ? 'هذا الحقل مطلوب' : null
           : null,
       style: const TextStyle(fontSize: 14, color: AppColors.text),
       decoration: InputDecoration(
@@ -1258,8 +1398,8 @@ class _TableFieldState extends State<_TableField> {
                       textDirection: TextDirection.rtl,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 11, color: AppColors.text3),
+                      style:
+                          const TextStyle(fontSize: 11, color: AppColors.text3),
                     ),
                   ],
                 ],
@@ -1423,8 +1563,8 @@ class _TableFieldState extends State<_TableField> {
                     elevation: 0,
                   ),
                   child: const Text('حفظ',
-                      style: TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w700)),
+                      style:
+                          TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
                 ),
               ),
             ],
@@ -1452,22 +1592,20 @@ class _TableFieldState extends State<_TableField> {
                   alignment: Alignment.centerRight,
                   child: Text(
                     '${widget.rows.length} ${widget.rows.length == 1 ? 'عنصر' : 'عناصر'}',
-                    style: const TextStyle(
-                        fontSize: 11, color: AppColors.text3),
+                    style:
+                        const TextStyle(fontSize: 11, color: AppColors.text3),
                   ),
                 ),
               ),
             for (int r = 0; r < widget.rows.length; r++)
-              _editingRows.contains(r)
-                  ? _buildEditCard(r)
-                  : _buildViewCard(r),
+              _editingRows.contains(r) ? _buildEditCard(r) : _buildViewCard(r),
             SizedBox(
               height: 36,
               child: OutlinedButton.icon(
                 onPressed: _addRow,
                 icon: const Icon(Icons.add, size: 16),
-                label: Text(
-                    widget.rows.isEmpty ? 'إضافة عنصر' : 'إضافة عنصر آخر'),
+                label:
+                    Text(widget.rows.isEmpty ? 'إضافة عنصر' : 'إضافة عنصر آخر'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.primary,
                   side: const BorderSide(color: AppColors.primary),
@@ -1483,8 +1621,7 @@ class _TableFieldState extends State<_TableField> {
               const SizedBox(height: 6),
               Text(
                 state.errorText!,
-                style: const TextStyle(
-                    fontSize: 12, color: AppColors.rejected),
+                style: const TextStyle(fontSize: 12, color: AppColors.rejected),
               ),
             ],
           ],

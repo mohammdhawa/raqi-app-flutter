@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../attendance/presentation/providers/attendance_controller.dart';
+import '../../../attendance/presentation/providers/leave_providers.dart';
 import '../../domain/notification_model.dart';
 import '../providers/notifications_controller.dart';
 
@@ -210,6 +213,31 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       return;
     }
 
+    // A refusal read from the list is often the first the app hears of it —
+    // the push may have arrived while it was closed. Refetch today's records
+    // before opening the screen, forced past the same-day guard, so the
+    // check-in button is back by the time the employee gets there.
+    if (notification.type == NotificationType.attendanceRejected) {
+      if (ref.exists(attendanceControllerProvider)) {
+        ref.read(attendanceControllerProvider.notifier).reload();
+      }
+      final date = notification.rejectionDate;
+      final now = DateTime.now();
+      final isToday = date != null &&
+          date.year == now.year &&
+          date.month == now.month &&
+          date.day == now.day;
+      if (!mounted) return;
+      if (date == null || isToday) {
+        context.push('/attendance');
+      } else {
+        context.push(
+          '/attendance/history?date=${DateFormat('yyyy-MM-dd').format(date)}',
+        );
+      }
+      return;
+    }
+
     // An admin broadcast carries no document/leave id — open the dedicated
     // page to read the full message. Pass the notification as `extra` so it
     // renders instantly.
@@ -221,6 +249,16 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         );
       }
       return;
+    }
+
+    // An HR-filed excuse adds an approved row the employee never submitted —
+    // and takes balance days only when its type deducts. Re-read the balance
+    // in that case alone: prompting someone to go check a balance that did
+    // not move is exactly the confusion `deducts_balance` exists to prevent.
+    // (FCM data values are strings, hence the "1".)
+    if (notification.data['type'] == 'leave_excuse_recorded' &&
+        notification.data['deducts_balance']?.toString() == '1') {
+      ref.invalidate(leaveBalanceProvider);
     }
 
     // Navigate based on the payload. A leave_request_id always wins so leave
@@ -558,6 +596,13 @@ class _TypeIcon extends StatelessWidget {
           AppColors.pending,
           Icons.logout_rounded,
         ),
+      // The app's rejection tone, and a badge icon rather than the reminder's
+      // logout arrow: nothing about this one is a nudge to finish the day.
+      NotificationType.attendanceRejected => (
+          AppColors.rejectedBg,
+          AppColors.rejected,
+          Icons.gpp_bad_outlined,
+        ),
       NotificationType.broadcast => (
           AppColors.accentSoft,
           AppColors.primary,
@@ -615,6 +660,11 @@ class _StatusChip extends StatelessWidget {
           'تذكير انصراف',
           AppColors.pendingText,
           AppColors.pendingBg,
+        ),
+      NotificationType.attendanceRejected => (
+          'تسجيل مرفوض',
+          AppColors.rejectedText,
+          AppColors.rejectedBg,
         ),
       NotificationType.broadcast => (
           'تعميم',

@@ -149,11 +149,12 @@ class DocumentsRepository {
       options: Options(contentType: 'multipart/form-data'),
     ));
 
+    // Shape only — the body carries the document's own content, which has no
+    // business being written to the device log.
     if (kDebugMode) {
-      debugPrint('=== CREATE RESPONSE ===');
-      debugPrint('Status: ${response.statusCode}');
-      debugPrint('Data type: ${response.data.runtimeType}');
-      debugPrint('Data: ${response.data}');
+      debugPrint(
+        'POST /documents → ${response.statusCode} (${response.data.runtimeType})',
+      );
     }
 
     final data = response.data;

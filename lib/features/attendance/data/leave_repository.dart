@@ -6,6 +6,10 @@ import '../../../core/errors/api_failure.dart';
 import '../../../core/network/api_client.dart';
 import '../domain/leave.dart';
 
+/// One page of a leave listing, plus whether the paginator reports more
+/// pages after it.
+typedef LeaveRequestsPage = ({List<LeaveRequest> requests, bool hasMore});
+
 /// Wraps the attendance Leave Management endpoints
 /// (`/api/attendance/leave-*`). Returns parsed domain objects; throws
 /// [ApiFailure] on errors (mapped by the [ApiClient] interceptor).
@@ -37,6 +41,28 @@ class LeaveRepository {
     );
   }
 
+  /// `GET /attendance/leave-types?for=…` — the HR-managed vocabulary that
+  /// feeds the type picker.
+  ///
+  /// [form] is always sent: the unfiltered list contains types an employee may
+  /// not request (an official mission is recorded by HR), and naming one of
+  /// those on a request comes back as a 422 on `leave_type`.
+  ///
+  /// The backend returns them in creation order, which IS the display order —
+  /// there is no `sort_order` field — so the list is passed through untouched.
+  Future<List<LeaveType>> leaveTypes({
+    LeaveTypeForm form = LeaveTypeForm.requests,
+  }) async {
+    final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
+      '/attendance/leave-types',
+      queryParameters: {'for': form.apiValue},
+    ));
+    return _extractList(response.data)
+        .map(LeaveType.fromJson)
+        .where((t) => t.id != 0)
+        .toList();
+  }
+
   /// `GET /attendance/leave-managers`
   Future<List<LeaveManager>> managers() async {
     final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
@@ -49,11 +75,24 @@ class LeaveRepository {
   }
 
   /// `POST /attendance/leave-requests`
+  ///
+  /// The type is named by [leaveTypeId] only. The legacy free-text
+  /// `leave_type` is deliberately never sent: the backend resolves such text
+  /// against a type's code and names, so a near-miss like `"مرضية"` (the
+  /// seeded name is `إجازة مرضية`) matches nothing, is stored verbatim and
+  /// **deducts balance** — charging the employee for a sick day.
+  ///
+  /// [leaveTypeId] is `required` even though the endpoint accepts a request
+  /// without one. An untyped request is filed as deducting AND skips the
+  /// type's required-reason rule, so "no type" is not a neutral default —
+  /// it is the wrong answer for every non-deducting type. Making it
+  /// unskippable here means no future caller can reintroduce that silently;
+  /// a form that cannot offer a type must refuse to submit instead.
   Future<LeaveRequest> create({
     required DateTime startDate,
     required DateTime endDate,
     required int managerId,
-    String? leaveType,
+    required int leaveTypeId,
     String? reason,
   }) async {
     final response = await _run(() => _api.dio.post<Map<String, dynamic>>(
@@ -62,7 +101,7 @@ class LeaveRepository {
         'start_date': _formatDate(startDate),
         'end_date': _formatDate(endDate),
         'manager_id': managerId,
-        if (leaveType != null && leaveType.isNotEmpty) 'leave_type': leaveType,
+        'leave_type_id': leaveTypeId,
         if (reason != null && reason.isNotEmpty) 'reason': reason,
       },
     ));
@@ -73,30 +112,59 @@ class LeaveRepository {
   Future<List<LeaveRequest>> myRequests({
     LeaveStatusFilter status = LeaveStatusFilter.all,
     int? year,
+    int? perPage,
+  }) async =>
+      (await myRequestsPage(status: status, year: year, perPage: perPage))
+          .requests;
+
+  /// One page of [myRequests], with the paginator's own answer to "is there
+  /// another page?" — so a caller scanning for a specific row knows when it
+  /// has actually run out rather than guessing from the row count.
+  Future<LeaveRequestsPage> myRequestsPage({
+    LeaveStatusFilter status = LeaveStatusFilter.all,
+    int? year,
+    int? perPage,
+    int page = 1,
   }) async {
     final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
       '/attendance/leave-requests',
       queryParameters: {
         if (status.apiValue != null) 'status': status.apiValue,
         if (year != null) 'year': year,
+        if (perPage != null) 'per_page': perPage,
+        if (page > 1) 'page': page,
       },
     ));
-    return _extractList(response.data).map(LeaveRequest.fromJson).toList();
+    return _extractPage(response.data);
   }
 
   /// `GET /attendance/leave-requests/approvals` — requests assigned to the
   /// authenticated manager for approval.
   Future<List<LeaveRequest>> approvals({
     LeaveStatusFilter status = LeaveStatusFilter.all,
+    int? perPage,
+  }) async =>
+      (await approvalsPage(status: status, perPage: perPage)).requests;
+
+  /// One page of [approvals] — see [myRequestsPage].
+  Future<LeaveRequestsPage> approvalsPage({
+    LeaveStatusFilter status = LeaveStatusFilter.all,
+    int? perPage,
+    int page = 1,
   }) async {
     final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
       '/attendance/leave-requests/approvals',
       queryParameters: {
         if (status.apiValue != null) 'status': status.apiValue,
+        if (perPage != null) 'per_page': perPage,
+        if (page > 1) 'page': page,
       },
     ));
-    return _extractList(response.data).map(LeaveRequest.fromJson).toList();
+    return _extractPage(response.data);
   }
+
+  /// The largest page the listing endpoints accept (`per_page` ≤ 100).
+  static const int maxPerPage = 100;
 
   /// `PATCH /attendance/leave-requests/{id}/review` with `{ "status": ... }`.
   Future<LeaveRequest> review({
@@ -120,6 +188,7 @@ class LeaveRepository {
     if (node is Map) {
       node = node['leave_requests'] ??
           node['leaveRequests'] ??
+          node['leave_types'] ??
           node['managers'] ??
           node['data'] ??
           node['items'] ??
@@ -131,6 +200,47 @@ class LeaveRepository {
       return node.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
     }
     return const [];
+  }
+
+  /// Parses one page: its rows, and whether the paginator reports more.
+  ///
+  /// "Fewer rows than we asked for" is deliberately NOT the end-of-list test
+  /// — the server decides the page size, so a `per_page` it clamps would end
+  /// a scan early and report a row that exists as missing. When the response
+  /// carries no paginator at all (a bare list), there is exactly one page.
+  LeaveRequestsPage _extractPage(dynamic data) => (
+        requests: _extractList(data).map(LeaveRequest.fromJson).toList(),
+        hasMore: _hasMorePages(data),
+      );
+
+  bool _hasMorePages(dynamic data) {
+    final paginator = _paginator(data);
+    if (paginator == null) return false;
+    final current = _asInt(paginator['current_page']);
+    final last = _asInt(paginator['last_page']);
+    if (current != null && last != null) return current < last;
+    // Older/leaner envelopes: the next-page link is the same statement.
+    final next = paginator['next_page_url'];
+    return next != null && next.toString().isNotEmpty;
+  }
+
+  /// The Laravel paginator inside the response envelope, or null when the
+  /// payload is a bare list.
+  Map? _paginator(dynamic data) {
+    if (data is! Map) return null;
+    for (final key in const ['leave_requests', 'leaveRequests', 'data']) {
+      final node = data[key];
+      if (node is Map && node['data'] is List) return node;
+    }
+    if (data['data'] is List && data.containsKey('current_page')) return data;
+    return null;
+  }
+
+  int? _asInt(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse(raw.toString());
   }
 
   /// Pulls a single request map out of a create/review response and parses it.

@@ -9,6 +9,19 @@ import '../../../core/network/api_client.dart';
 import '../domain/attendance_record.dart';
 import '../domain/pending_attendance_record.dart';
 
+/// The one message `POST /attendance/sync` returns for a failure that was
+/// NOT a business rule — a database or filesystem error the server swallowed
+/// and logged. Documented in ATTENDANCE_API.md §3.2 as "worth retrying
+/// later"; every other value of `failed[].error` is a rule from §4 that will
+/// reject the same entry identically no matter how often it is re-sent.
+///
+/// Matching on the message is a stopgap and is deliberately the ONLY place
+/// that does it. The backend sends no per-entry `error_code` or `retryable`
+/// flag today; when it does, switch [AttendanceSyncFailure.isRetryable] to
+/// read that field and delete this constant.
+const String attendanceSyncTransientError =
+    'تعذر حفظ هذا السجل، يرجى المحاولة لاحقاً.';
+
 /// One failed entry from a bulk sync — `index` refers to its position in
 /// the request's `records[]`/`selfies[]` arrays, so callers can map it
 /// back to the local queue entry that produced it.
@@ -17,6 +30,21 @@ class AttendanceSyncFailure {
 
   final int index;
   final String error;
+
+  /// Whether re-sending this entry unchanged could succeed later.
+  ///
+  /// Business-rule rejections (non-working day, duplicate check-in, outside
+  /// the window…) are permanent for that entry and belong in the dismissible
+  /// `failed` state. An unexpected server-side failure is not the record's
+  /// fault and must stay queued, or a transient database blip silently
+  /// discards a real check-in the employee already performed.
+  bool get isRetryable =>
+      _normalize(error) == _normalize(attendanceSyncTransientError);
+
+  /// Collapses whitespace so trailing spaces or a wrapped line in the
+  /// response cannot turn a retryable failure into a terminal one.
+  static String _normalize(String value) =>
+      value.trim().replaceAll(RegExp(r'\s+'), ' ');
 
   factory AttendanceSyncFailure.fromJson(Map<String, dynamic> json) =>
       AttendanceSyncFailure(
@@ -39,7 +67,8 @@ class AttendanceSyncResult {
             .map((e) => AttendanceRecord.fromJson(e as Map<String, dynamic>))
             .toList(),
         failed: ((json['failed'] as List?) ?? [])
-            .map((e) => AttendanceSyncFailure.fromJson(e as Map<String, dynamic>))
+            .map((e) =>
+                AttendanceSyncFailure.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
 }
@@ -83,10 +112,10 @@ class AttendanceRepository {
     });
 
     final response = await _run(() => _api.dio.post<Map<String, dynamic>>(
-      '/attendance/record',
-      data: form,
-      options: Options(contentType: 'multipart/form-data'),
-    ));
+          '/attendance/record',
+          data: form,
+          options: Options(contentType: 'multipart/form-data'),
+        ));
     return AttendanceRecord.fromJson(
       response.data!['record'] as Map<String, dynamic>,
     );
@@ -94,7 +123,8 @@ class AttendanceRepository {
 
   /// `POST /attendance/sync` — bulk upload of queued offline records.
   /// `records[]` and `selfies[]` are index-aligned, per the docs.
-  Future<AttendanceSyncResult> sync(List<PendingAttendanceRecord> entries) async {
+  Future<AttendanceSyncResult> sync(
+      List<PendingAttendanceRecord> entries) async {
     final form = FormData();
     for (var i = 0; i < entries.length; i++) {
       final entry = entries[i];
@@ -117,29 +147,36 @@ class AttendanceRepository {
     }
 
     final response = await _run(() => _api.dio.post<Map<String, dynamic>>(
-      '/attendance/sync',
-      data: form,
-      options: Options(contentType: 'multipart/form-data'),
-    ));
+          '/attendance/sync',
+          data: form,
+          options: Options(contentType: 'multipart/form-data'),
+        ));
     return AttendanceSyncResult.fromJson(response.data!);
   }
 
-  /// `GET /attendance/my-records?date=&from=&to=&page=`
+  /// `GET /attendance/my-records?date=&from=&to=&rejected=&page=`
+  ///
+  /// [rejected] narrows to rows HR refused (`true`) or to the ones still
+  /// standing (`false`); `null` — the default — sends no parameter and
+  /// returns both. Note the backend does NOT accept `rejection_reason` here;
+  /// that filter belongs to the admin listing only.
   Future<AttendanceRecordsPage> myRecords({
     DateTime? date,
     DateTime? from,
     DateTime? to,
+    bool? rejected,
     int page = 1,
   }) async {
     final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
-      '/attendance/my-records',
-      queryParameters: {
-        'page': page,
-        if (date != null) 'date': _formatDate(date),
-        if (from != null) 'from': _formatDate(from),
-        if (to != null) 'to': _formatDate(to),
-      },
-    ));
+          '/attendance/my-records',
+          queryParameters: {
+            'page': page,
+            if (date != null) 'date': _formatDate(date),
+            if (from != null) 'from': _formatDate(from),
+            if (to != null) 'to': _formatDate(to),
+            if (rejected != null) 'rejected': rejected ? 1 : 0,
+          },
+        ));
     return AttendanceRecordsPage.fromJson(response.data!);
   }
 

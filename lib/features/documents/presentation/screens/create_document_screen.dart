@@ -12,7 +12,9 @@ import '../../../auth/domain/user.dart';
 import '../../data/documents_repository.dart';
 import '../../domain/document.dart';
 import '../providers/documents_list_controller.dart';
+import '../../../../core/errors/error_log.dart';
 import '../widgets/approver_picker_sheet.dart';
+import '../widgets/approver_validation.dart';
 import '../widgets/attachments_field.dart';
 import 'template_picker_screen.dart';
 
@@ -40,6 +42,12 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
   List<User> _approvers = [];
   bool _isSubmitting = false;
   String? _formError;
+  String? _approverError;
+
+  /// Set when the server rejected one of the chosen approvers. Blocks submit
+  /// until the user has re-opened the picker (which re-reads `/managers`)
+  /// and confirmed the corrected list.
+  bool _approversNeedConfirmation = false;
 
   static const _allowedExtensions = [
     'pdf',
@@ -67,9 +75,12 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
     if (result == null || result.files.isEmpty) return;
     final picked = result.files.first;
     if (picked.path == null) return;
-    if (picked.size > AppConstants.maxUploadBytes) {
+    // The main document is capped at 20 MB by the backend — attachments are
+    // the ones allowed 50 MB. Checking the attachment ceiling here let a
+    // 20–50 MB document upload in full before the server rejected it.
+    if (picked.size > AppConstants.maxDocumentBytes) {
       setState(() {
-        _formError = 'حجم الملف يتجاوز الحد الأقصى (50 ميجابايت).';
+        _formError = 'حجم الملف يتجاوز الحد الأقصى للمستند (20 ميجابايت).';
       });
       return;
     }
@@ -95,11 +106,7 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
   // ── Approver picker ────────────────────────────────────────────────
 
   Future<void> _pickApprovers() async {
-    debugPrint('╔══ [STEP 1] _pickApprovers() called');
-    debugPrint('║  mounted=$mounted, approvers.length=${_approvers.length}');
-
     try {
-      debugPrint('╠══ [STEP 2] Opening showModalBottomSheet...');
       final result = await showModalBottomSheet<List<User>>(
         context: context,
         isScrollControlled: true,
@@ -108,28 +115,28 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         builder: (sheetContext) {
-          debugPrint('╠══ [STEP 3] showModalBottomSheet builder called');
           return FractionallySizedBox(
             heightFactor: 0.85,
             child: ApproverPickerSheet(initialSelection: _approvers),
           );
         },
       );
-      debugPrint('╠══ [STEP 8] Sheet closed, result=${result?.length ?? "null"}');
       if (result != null) {
-        setState(() => _approvers = result);
+        setState(() {
+          _approvers = result;
+          // The sheet re-reads `/managers` on open, so confirming it is the
+          // user confirming a freshly fetched roster.
+          _approverError = null;
+          _approversNeedConfirmation = false;
+        });
       }
     } catch (e, stackTrace) {
-      debugPrint('╠══ [ERROR] showModalBottomSheet threw!');
-      debugPrint('║  Type: ${e.runtimeType}');
-      debugPrint('║  Error: $e');
-      debugPrint('║  Stack: $stackTrace');
+      logUnexpected('Approver picker failed to open', e, stackTrace);
       if (!mounted) return;
       setState(() {
-        _formError = 'تعذّر فتح نافذة اختيار المعتمدين: $e';
+        _formError = 'تعذّر فتح نافذة اختيار المعتمدين. حاول مرة أخرى.';
       });
     }
-    debugPrint('╚══ _pickApprovers() done');
   }
 
   void _reorderApprovers(int oldIndex, int newIndex) {
@@ -155,6 +162,13 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
     }
     if (_approvers.isEmpty) {
       setState(() => _formError = 'الرجاء اختيار معتمد واحد على الأقل.');
+      return;
+    }
+    // A previous attempt had an approver rejected. Re-sending before the user
+    // has looked at the corrected list would just fail the same way.
+    if (_approversNeedConfirmation) {
+      setState(() => _approverError ??=
+          'يرجى مراجعة قائمة المعتمدين وتأكيدها قبل الإرسال.');
       return;
     }
 
@@ -183,16 +197,28 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
       );
       context.pop();
     } on ApiFailure catch (failure) {
+      if (!mounted) return;
+      // An approver was deleted or demoted between loading `/managers` and
+      // submitting. Drop the rejected entries and make the user re-pick.
+      final stale = resolveStaleApprovers(failure, _approvers);
+      if (stale != null) {
+        setState(() {
+          _approvers = stale.remaining;
+          _approverError = stale.message;
+          _approversNeedConfirmation = true;
+        });
+        return;
+      }
       setState(() {
         _formError = arabicMessageFor(failure.code, fallback: failure.message);
       });
     } catch (e, stackTrace) {
-      debugPrint('=== UPLOAD ERROR ===');
-      debugPrint('Type: ${e.runtimeType}');
-      debugPrint('Error: $e');
-      debugPrint('Stack: $stackTrace');
+      // Never surfaced to the user, and never written in full to a release
+      // log: the text can carry a local file path or a Dio object dump.
+      logUnexpected('Document upload failed', e, stackTrace);
+      if (!mounted) return;
       setState(() {
-        _formError = '[DEBUG] ${e.runtimeType}: $e';
+        _formError = arabicMessageFor(ApiErrorCode.unknown);
       });
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -297,8 +323,12 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
                             }),
                   ),
                   const SizedBox(height: 8),
+                  // 20 MB, matching _pickFile's check and the backend's
+                  // `file => max:20480`. The 50 MB ceiling belongs to
+                  // attachments, and naming it here invited users to pick a
+                  // document the picker then refused.
                   const Text(
-                    'الأنواع المدعومة: PDF · DOC · DOCX · JPG · PNG · WEBP — حد أقصى 50 ميجابايت',
+                    'الأنواع المدعومة: PDF · DOC · DOCX · JPG · PNG · WEBP — حد أقصى 20 ميجابايت',
                     style: TextStyle(fontSize: 11, color: AppColors.text3),
                   ),
 
@@ -312,8 +342,7 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
                   AttachmentsField(
                     attachments: _attachments,
                     onPick: _pickAttachments,
-                    onRemove: (i) =>
-                        setState(() => _attachments.removeAt(i)),
+                    onRemove: (i) => setState(() => _attachments.removeAt(i)),
                   ),
                   const SizedBox(height: 8),
                   const Text(
@@ -349,6 +378,21 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
                     onReorder: _reorderApprovers,
                     onRemove: _removeApprover,
                   ),
+
+                  // Approver rejection — shown beside the selector it is
+                  // about, not in the generic form banner below.
+                  if (_approverError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _approverError!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.rejected,
+                        fontWeight: FontWeight.w600,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
 
                   // ── Form error ──
                   if (_formError != null) ...[
@@ -717,7 +761,8 @@ class _AlraqiTextField extends StatelessWidget {
       maxLines: multiline ? null : 1,
       minLines: multiline ? (minLines ?? 3) : 1,
       validator: validator,
-      buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
+      buildCounter:
+          (_, {required currentLength, required isFocused, maxLength}) => null,
       style: const TextStyle(fontSize: 14, color: AppColors.text),
       decoration: InputDecoration(
         hintText: hintText,
@@ -1180,8 +1225,7 @@ class _ApproversList extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: onAdd,
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(
-                      color: AppColors.primary, width: 1.5),
+                  side: const BorderSide(color: AppColors.primary, width: 1.5),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),

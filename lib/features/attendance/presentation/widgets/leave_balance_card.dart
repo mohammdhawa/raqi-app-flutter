@@ -106,6 +106,35 @@ class _Content extends StatelessWidget {
             ),
           ],
         ),
+
+        // Days taken under a non-deducting type (sick, unpaid, bereavement…).
+        // A SEPARATE line, never folded into the three stats above: it is not
+        // part of "المستخدم" and does not reduce "المتبقي", so no arithmetic
+        // relates it to them. Rendered only when there are any — a permanent
+        // "0" would be noise on the home screen for most employees.
+        //
+        // This is NOT the attendance reports' `excused_days`, which counts
+        // HR-filed excuses whether or not they deduct. Different sets.
+        if (balance.nonDeductingDays > 0) ...[
+          const SizedBox(height: 12),
+          _FootNote(
+            icon: Icons.verified_outlined,
+            color: AppColors.approved,
+            text: 'أيام لم تُخصم من الرصيد: ${balance.nonDeductingDays}',
+          ),
+        ],
+
+        // Non-zero only when HR force-recorded an excuse past the allocation;
+        // "المتبقي" stays clamped at 0, so without this the overdraft would be
+        // invisible.
+        if (balance.overBalanceDays > 0) ...[
+          const SizedBox(height: 8),
+          _FootNote(
+            icon: Icons.warning_amber_rounded,
+            color: AppColors.pendingText,
+            text: 'أيام تجاوزت الرصيد: ${balance.overBalanceDays}',
+          ),
+        ],
       ],
     );
   }
@@ -115,6 +144,37 @@ class _Content extends StatelessWidget {
         height: 34,
         color: AppColors.border,
       );
+}
+
+/// A single figure that stands apart from the three headline stats — it
+/// neither adds to nor subtracts from them.
+class _FootNote extends StatelessWidget {
+  const _FootNote({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: AppTheme.captionS(color: color)
+                .copyWith(fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _Stat extends StatelessWidget {

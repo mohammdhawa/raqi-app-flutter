@@ -107,9 +107,12 @@ class AttendanceScreen extends ConsumerWidget {
     // the final say either way.
     String? disabledReason;
     if (nextType == AttendanceType.checkIn) {
-      // Blocked once the day is complete, on a day off, or on approved leave.
-      // A checkout for today (missing-checkout records are excluded upstream)
-      // means the single daily shift is already done — no second check-in.
+      // Blocked once the day is complete or on approved leave. A checkout for
+      // today (missing-checkout records are excluded upstream) means the
+      // single daily shift is already done — no second check-in.
+      // checkInBlockedReason stays in the chain even though the calendar no
+      // longer blocks anything: it is the one hook a future day-off rule
+      // would come back through.
       if (status == AttendanceType.checkOut) {
         disabledReason = 'لقد أكملت دوام اليوم — تم تسجيل الحضور والانصراف.';
       } else {
@@ -140,8 +143,18 @@ class AttendanceScreen extends ConsumerWidget {
             Expanded(
               child: RefreshIndicator(
                 color: AppColors.primary,
-                onRefresh: () =>
+                // Both halves of the status: the local queue AND today's
+                // server records. Refreshing only the queue left a refusal
+                // filed by HR invisible — the one change the employee cannot
+                // cause themselves, and the one that decides which button
+                // they get.
+                onRefresh: () async {
+                  await Future.wait([
                     ref.read(attendanceQueueProvider.notifier).refresh(),
+                    ref.read(attendanceControllerProvider.notifier).reload(),
+                  ]);
+                  ref.invalidate(approvedLeaveTodayProvider);
+                },
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
@@ -183,12 +196,16 @@ class AttendanceScreen extends ConsumerWidget {
                       children: [
                         Text('سجلات اليوم', style: AppTheme.heading3()),
                         const Spacer(),
-                        if (user?.canViewAttendance == true)
-                          TextButton(
-                            onPressed: () =>
-                                context.push('/attendance/history'),
-                            child: const Text('السجل الكامل'),
-                          ),
+                        // Open to everyone: `/attendance/my-records` is
+                        // auth-only and returns just the caller's own rows.
+                        // Gating this on canViewAttendance left the employees
+                        // who get refusal notifications — exactly the people
+                        // told to go look — with nowhere to look. The screen
+                        // keeps its 403 empty state as the backstop.
+                        TextButton(
+                          onPressed: () => context.push('/attendance/history'),
+                          child: const Text('السجل الكامل'),
+                        ),
                       ],
                     ),
                     if (todayRecords.isEmpty)
@@ -266,13 +283,13 @@ class _AttendanceHeader extends StatelessWidget {
                   ),
                 const SizedBox(width: 8),
                 const NotificationBellIcon(),
-                if (user?.canViewAttendance == true) ...[
-                  const SizedBox(width: 8),
-                  _HeaderIconBtn(
-                    icon: Icons.history_rounded,
-                    onTap: () => context.push('/attendance/history'),
-                  ),
-                ],
+                const SizedBox(width: 8),
+                // Same reasoning as the «السجل الكامل» button below: own
+                // records are readable by any authenticated user.
+                _HeaderIconBtn(
+                  icon: Icons.history_rounded,
+                  onTap: () => context.push('/attendance/history'),
+                ),
 
                 const Spacer(),
 
@@ -648,11 +665,16 @@ class _TodayRecordTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isCheckIn = record.type == AttendanceType.checkIn;
     final isFailed = record.status == AttendanceSyncStatus.failed;
-    final tint = record.isMissingCheckout
-        ? AppColors.pending
-        : isCheckIn
-            ? AppColors.approved
-            : AppColors.text2;
+    // A refused record outranks every other tint: it is the one state where the
+    // employee has to act, and it must never wear the green of a record that
+    // counts.
+    final tint = record.isRejected
+        ? AppColors.rejected
+        : record.isMissingCheckout
+            ? AppColors.pending
+            : isCheckIn
+                ? AppColors.approved
+                : AppColors.text2;
     final workHours = record.workHours;
 
     return Container(
@@ -685,14 +707,23 @@ class _TodayRecordTile extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(record.type.arabicLabel, style: AppTheme.label()),
+                    Text(
+                      record.type.arabicLabel,
+                      style: AppTheme.label().copyWith(
+                        decoration: record.isRejected
+                            ? TextDecoration.lineThrough
+                            : null,
+                        color: record.isRejected ? AppColors.text2 : null,
+                      ),
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       DateFormat('HH:mm').format(record.recordedAt),
                       style: AppTheme.captionS(color: AppColors.text2),
                     ),
-                    // Worked hours live on the checkout row.
-                    if (!isCheckIn && workHours != null) ...[
+                    // Worked hours live on the checkout row — and a refused one
+                    // contributed none, so they would be a lie here.
+                    if (!isCheckIn && workHours != null && !record.isRejected) ...[
                       const SizedBox(height: 2),
                       Text(
                         'ساعات العمل: ${formatWorkHours(workHours)}',
@@ -702,12 +733,63 @@ class _TodayRecordTile extends ConsumerWidget {
                   ],
                 ),
               ),
-              if (record.isMissingCheckout)
+              if (record.isRejected)
+                const _RejectedChip()
+              else if (record.isMissingCheckout)
                 const _IncompleteDayChip()
               else
                 SyncStatusBadge(status: record.status),
             ],
           ),
+
+          // Why HR refused the record. Spelled out on the row itself: the push
+          // notification is long gone by the time they open the app, and
+          // without the reason they cannot know what to do differently.
+          if (record.isRejected && record.rejectionMessage != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.rejectedBg,
+                borderRadius: BorderRadius.circular(AppColors.rMd),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.gpp_bad_outlined,
+                    color: AppColors.rejected,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          record.rejectionMessage!,
+                          style: AppTheme.captionS(color: AppColors.rejected),
+                        ),
+                        // The refusal frees the day's check-in slot again, and
+                        // saying so is the whole point of showing this row: the
+                        // employee was told to record the day again and needs
+                        // to know they still can.
+                        if (record.type == AttendanceType.checkIn) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'يمكنك إعادة تسجيل الحضور لهذا اليوم.',
+                            style: AppTheme.captionS(color: AppColors.text2)
+                                .copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           // A server-rejected queued entry: show why, with a dismiss action.
           if (isFailed && record.errorMessage != null) ...[
@@ -758,6 +840,42 @@ class _TodayRecordTile extends ConsumerWidget {
 
 /// Marks a check-in the employee never closed (server `missing_checkout`),
 /// so the day reads as incomplete rather than a full day worked.
+/// Badge on a record HR refused. Deliberately the same shape as the
+/// incomplete-day chip — it replaces the sync badge, because "synced" is true
+/// but beside the point once the server has thrown the record out.
+class _RejectedChip extends StatelessWidget {
+  const _RejectedChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.rejectedBg,
+        borderRadius: BorderRadius.circular(AppColors.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.gpp_bad_outlined,
+            color: AppColors.rejected,
+            size: 14,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'غير مقبول',
+            style: AppTheme.captionS(color: AppColors.rejected).copyWith(
+              fontWeight: FontWeight.w600,
+              height: 1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _IncompleteDayChip extends StatelessWidget {
   const _IncompleteDayChip();
 

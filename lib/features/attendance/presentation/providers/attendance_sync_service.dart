@@ -144,26 +144,53 @@ class AttendanceSyncService {
         return;
       }
 
-      _consecutiveFailures = 0;
-
       // The server's failed[].index points into the records[] we sent —
       // i.e. positions in `sendable`, NOT `unsynced`. Mapping against the
       // full list after filtering would shift indices and flip the wrong
       // records to synced/failed.
-      final failedByIndex = {for (final f in result.failed) f.index: f.error};
+      final failedByIndex = {for (final f in result.failed) f.index: f};
+
+      // Not every entry in failed[] is finished with.
+      //
+      // The endpoint reports two different things through one array: a
+      // business rule the entry broke (permanent — re-sending it produces
+      // the same rejection forever) and an unexpected server-side failure
+      // (transient — the server logged it and the docs call it retryable).
+      // Marking both `failed` threw away real check-ins whenever the server
+      // hiccuped: `failed` is terminal here, it schedules no retry, and the
+      // only thing the employee can do with the tile is dismiss it.
+      var hasRetryable = false;
       for (var i = 0; i < sendable.length; i++) {
         final entry = sendable[i];
         if (entry.id == null) continue;
-        final error = failedByIndex[i];
-        if (error != null) {
-          await queue.markFailed(entry.id!, error);
-        } else {
+        final failure = failedByIndex[i];
+
+        if (failure == null) {
           await queue.markSynced(entry.id!);
           // getUnsynced only returns pending rows, so a synced record's
           // selfie is never read again — reclaim the storage. entry.selfiePath
           // is the resolved absolute path (set on the sendable copy above).
           deleteSelfieQuietly(entry.selfiePath);
+          continue;
         }
+
+        if (failure.isRetryable) {
+          // Left `pending`, and its selfie left on disk — the next attempt
+          // re-sends it. getUnsynced picks it up again unchanged.
+          hasRetryable = true;
+          continue;
+        }
+
+        await queue.markFailed(entry.id!, failure.error);
+      }
+
+      if (hasRetryable) {
+        // Keep climbing the backoff ladder rather than resetting it: a
+        // server that just failed on some entries is exactly the case the
+        // widening delay exists for.
+        _scheduleRetry();
+      } else {
+        _consecutiveFailures = 0;
       }
     } finally {
       _isSyncing = false;
@@ -205,9 +232,8 @@ class AttendanceSyncService {
 
   void _scheduleRetry() {
     if (_retryTimer?.isActive ?? false) return;
-    final index = _consecutiveFailures
-        .clamp(0, _retryDelays.length - 1)
-        .toInt();
+    final index =
+        _consecutiveFailures.clamp(0, _retryDelays.length - 1).toInt();
     final delay = _retryDelays[index];
     _consecutiveFailures++;
     _retryTimer = Timer(delay, () {
