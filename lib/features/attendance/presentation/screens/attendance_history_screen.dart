@@ -12,10 +12,18 @@ import '../../domain/attendance_record.dart';
 import '../providers/attendance_history_controller.dart';
 
 /// Full attendance history: paginated `/attendance/my-records`, grouped by
-/// day (اليوم / أمس / date) with an optional date-range filter — mirrors
-/// the notifications screen's grouped-list layout and AppBar pattern.
+/// day (اليوم / أمس / date) with a date-range filter and a refused-only
+/// filter — mirrors the notifications screen's grouped-list layout and
+/// AppBar pattern.
+///
+/// Open to every employee: `my-records` is auth-only, and an employee whose
+/// attendance HR refused has to be able to look up what was refused and why.
 class AttendanceHistoryScreen extends ConsumerStatefulWidget {
-  const AttendanceHistoryScreen({super.key});
+  const AttendanceHistoryScreen({super.key, this.initialDate});
+
+  /// Opens the listing narrowed to this single day — used when an
+  /// `attendance_rejected` notification is about an earlier date.
+  final DateTime? initialDate;
 
   @override
   ConsumerState<AttendanceHistoryScreen> createState() =>
@@ -25,6 +33,12 @@ class AttendanceHistoryScreen extends ConsumerStatefulWidget {
 class _AttendanceHistoryScreenState
     extends ConsumerState<AttendanceHistoryScreen> {
   final _scrollController = ScrollController();
+
+  /// The listing is keyed by the day the screen was opened on, so a
+  /// notification tap gets its own (pre-filtered) controller.
+  AutoDisposeStateNotifierProvider<AttendanceHistoryController,
+          AttendanceHistoryState>
+      get _provider => attendanceHistoryProvider(widget.initialDate);
 
   @override
   void initState() {
@@ -44,12 +58,12 @@ class _AttendanceHistoryScreenState
     if (!_scrollController.hasClients) return;
     final position = _scrollController.position;
     if (position.pixels >= position.maxScrollExtent - 200) {
-      ref.read(attendanceHistoryProvider.notifier).loadMore();
+      ref.read(_provider.notifier).loadMore();
     }
   }
 
   Future<void> _pickDateRange() async {
-    final current = ref.read(attendanceHistoryProvider);
+    final current = ref.read(_provider);
     final now = DateTime.now();
     final initial = (current.from != null && current.to != null)
         ? DateTimeRange(start: current.from!, end: current.to!)
@@ -66,13 +80,13 @@ class _AttendanceHistoryScreenState
     );
     if (picked == null || !mounted) return;
     await ref
-        .read(attendanceHistoryProvider.notifier)
-        .applyFilter(from: picked.start, to: picked.end);
+        .read(_provider.notifier)
+        .applyDateRange(from: picked.start, to: picked.end);
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(attendanceHistoryProvider);
+    final state = ref.watch(_provider);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -93,7 +107,8 @@ class _AttendanceHistoryScreenState
           ),
           leading: Padding(
             padding: const EdgeInsets.all(8),
-            child: _FilterButton(active: state.hasFilter, onTap: _pickDateRange),
+            child:
+                _FilterButton(active: state.hasDateFilter, onTap: _pickDateRange),
           ),
           actions: [
             IconButton(
@@ -126,24 +141,25 @@ class _AttendanceHistoryScreenState
       }
       return ErrorStateView(
         failure: state.error!,
-        onRetry: () => ref.read(attendanceHistoryProvider.notifier).refresh(),
+        onRetry: () => ref.read(_provider.notifier).refresh(),
       );
     }
 
     if (state.isEmpty) {
       return EmptyStateView(
         icon: Icons.event_busy_outlined,
-        title: state.hasFilter
-            ? 'لا توجد سجلات ضمن هذا النطاق'
-            : 'لا توجد سجلات حتى الآن',
+        title: state.rejectedOnly
+            ? 'لا توجد تسجيلات مرفوضة'
+            : state.hasDateFilter
+                ? 'لا توجد سجلات ضمن هذا النطاق'
+                : 'لا توجد سجلات حتى الآن',
         subtitle: state.hasFilter
-            ? 'جرّب تغيير نطاق التواريخ المحدد.'
+            ? 'جرّب تغيير عوامل التصفية المحددة.'
             : 'ستظهر هنا سجلات الحضور والانصراف بعد أول تسجيل.',
         action: state.hasFilter
             ? TextButton(
-                onPressed: () =>
-                    ref.read(attendanceHistoryProvider.notifier).clearFilter(),
-                child: const Text('إزالة عامل التصفية'),
+                onPressed: () => ref.read(_provider.notifier).clearFilter(),
+                child: const Text('إزالة عوامل التصفية'),
               )
             : null,
       );
@@ -153,18 +169,24 @@ class _AttendanceHistoryScreenState
 
     return RefreshIndicator(
       color: AppColors.primary,
-      onRefresh: () => ref.read(attendanceHistoryProvider.notifier).refresh(),
+      onRefresh: () => ref.read(_provider.notifier).refresh(),
       child: CustomScrollView(
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          if (state.hasFilter)
+          SliverToBoxAdapter(
+            child: _RejectedFilterChip(
+              selected: state.rejectedOnly,
+              onTap: () => ref.read(_provider.notifier).toggleRejectedOnly(),
+            ),
+          ),
+          if (state.hasDateFilter)
             SliverToBoxAdapter(
               child: _FilterBanner(
                 from: state.from!,
                 to: state.to!,
                 onClear: () =>
-                    ref.read(attendanceHistoryProvider.notifier).clearFilter(),
+                    ref.read(_provider.notifier).applyDateRange(),
               ),
             ),
 
@@ -279,6 +301,59 @@ class _FilterButton extends StatelessWidget {
   }
 }
 
+/// Toggles the `rejected=1` filter — the employee's own view of what HR did
+/// not accept. Sits beside the date-range filter rather than replacing it:
+/// the two combine server-side.
+class _RejectedFilterChip extends StatelessWidget {
+  const _RejectedFilterChip({required this.selected, required this.onTap});
+
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.rejected : AppColors.surface,
+              borderRadius: BorderRadius.circular(AppColors.pill),
+              border: Border.all(
+                color: selected ? AppColors.rejected : AppColors.border,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.gpp_bad_outlined,
+                  size: 16,
+                  color: selected ? Colors.white : AppColors.text2,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'المرفوضة فقط',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                    color: selected ? Colors.white : AppColors.text2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _FilterBanner extends StatelessWidget {
   const _FilterBanner({
     required this.from,
@@ -361,11 +436,15 @@ class _HistoryRecordTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isCheckIn = record.type == AttendanceType.checkIn;
-    final tint = record.isMissingCheckout
-        ? AppColors.pending
-        : isCheckIn
-            ? AppColors.approved
-            : AppColors.text2;
+    // A refusal outranks every other tint — the day did not count, whatever
+    // else is true of the row.
+    final tint = record.isRejected
+        ? AppColors.rejected
+        : record.isMissingCheckout
+            ? AppColors.pending
+            : isCheckIn
+                ? AppColors.approved
+                : AppColors.text2;
     final selfieUrl = record.selfieUrl;
     final workHours = record.workHours;
 
@@ -421,8 +500,23 @@ class _HistoryRecordTile extends StatelessWidget {
                       decoration: BoxDecoration(color: tint, shape: BoxShape.circle),
                     ),
                     const SizedBox(width: 6),
-                    Text(record.type.arabicLabel, style: AppTheme.label()),
-                    if (record.isMissingCheckout) ...[
+                    Text(
+                      record.type.arabicLabel,
+                      style: AppTheme.label().copyWith(
+                        decoration: record.isRejected
+                            ? TextDecoration.lineThrough
+                            : null,
+                        color: record.isRejected ? AppColors.text2 : null,
+                      ),
+                    ),
+                    if (record.isRejected) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        '· غير مقبول',
+                        style: AppTheme.captionS(color: AppColors.rejected)
+                            .copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ] else if (record.isMissingCheckout) ...[
                       const SizedBox(width: 8),
                       Text(
                         '· بدون انصراف',
@@ -437,8 +531,25 @@ class _HistoryRecordTile extends StatelessWidget {
                   DateFormat('HH:mm').format(record.recordedAt),
                   style: AppTheme.captionS(color: AppColors.text2),
                 ),
-                // Worked hours are carried on the checkout row.
-                if (!isCheckIn && workHours != null) ...[
+                if (record.isRejected) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    record.rejectionReasonLabel,
+                    style: AppTheme.captionS(color: AppColors.rejected),
+                  ),
+                  // HR's note, when they left one — often the only thing that
+                  // tells the employee what to do differently next time.
+                  if (record.rejectionNote?.isNotEmpty ?? false) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'ملاحظة: ${record.rejectionNote}',
+                      style: AppTheme.captionS(color: AppColors.text2),
+                    ),
+                  ],
+                ],
+                // Worked hours are carried on the checkout row — a refused one
+                // contributed none.
+                if (!isCheckIn && workHours != null && !record.isRejected) ...[
                   const SizedBox(height: 2),
                   Text(
                     'ساعات العمل: ${formatWorkHours(workHours)}',

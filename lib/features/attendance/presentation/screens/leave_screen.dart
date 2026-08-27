@@ -173,7 +173,15 @@ class _MyRequestsTab extends ConsumerWidget {
             state: state,
             showRequester: false,
             emptyText: 'لا توجد طلبات إجازة.',
-            onRefresh: notifier.refresh,
+            // Pull-to-refresh is also the app's refresh point for the leave
+            // vocabulary and the balance: an admin can add a type at any
+            // time, and the balance is derived server-side from approved
+            // requests, so neither is safe to hold across a refresh.
+            onRefresh: () async {
+              ref.invalidate(leaveTypesProvider);
+              ref.invalidate(leaveBalanceProvider);
+              await notifier.refresh();
+            },
             onRetry: notifier.load,
           ),
         ),

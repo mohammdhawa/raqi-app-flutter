@@ -39,6 +39,9 @@ class AttendanceRecord {
     this.selfieUrl,
     this.status,
     this.workHours,
+    this.isRejected = false,
+    this.rejectionReason,
+    this.rejectionNote,
   });
 
   final int id;
@@ -66,6 +69,35 @@ class AttendanceRecord {
   /// `null` on check-ins (and on checkouts the server couldn't pair).
   final double? workHours;
 
+  /// True when HR refused this record: it was recorded away from the work
+  /// site, or with a selfie that isn't the employee.
+  ///
+  /// The backend keeps the row as evidence but looks straight through it —
+  /// the day counts as absent and the employee is expected to record it
+  /// again. So it must NOT drive status here either: treating a refused
+  /// check-in as a real one makes the app offer "check out", which the
+  /// server then refuses because no accepted check-in exists.
+  ///
+  /// Defaults to `false`, so a backend that predates refusals (no such field
+  /// in the payload) behaves exactly as it did before.
+  final bool isRejected;
+
+  /// Why it was refused — `location` | `selfie` | `other`. `null` unless
+  /// [isRejected].
+  final String? rejectionReason;
+
+  /// HR's free-text note on the refusal, if they left one.
+  final String? rejectionNote;
+
+  /// Arabic sentence for [rejectionReason], mirroring the backend's
+  /// `AttendanceRecord::REJECTION_REASON_LABELS` — the same wording the
+  /// employee got in their notification.
+  String get rejectionReasonLabel => switch (rejectionReason) {
+    'location' => 'الموقع المسجَّل لا يطابق موقع العمل',
+    'selfie' => 'الصورة الشخصية غير صحيحة أو غير واضحة',
+    _ => 'مخالفة تعليمات تسجيل الحضور',
+  };
+
   /// True on a check-in the employee forgot to close — the day is
   /// incomplete and must NOT be shown as a full day worked.
   bool get isMissingCheckout => status == 'missing_checkout';
@@ -83,6 +115,13 @@ class AttendanceRecord {
         selfieUrl: json['selfie_url'] as String?,
         status: json['status'] as String?,
         workHours: _parseDouble(json['work_hours']),
+        // `is_rejected` is appended by the backend; `rejected_at` is the
+        // column behind it. Reading both means a trimmed payload that carries
+        // only one of them still resolves correctly.
+        isRejected:
+            json['is_rejected'] as bool? ?? json['rejected_at'] != null,
+        rejectionReason: json['rejection_reason'] as String?,
+        rejectionNote: json['rejection_note'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -97,6 +136,9 @@ class AttendanceRecord {
     'selfie_url': selfieUrl,
     'status': status,
     'work_hours': workHours,
+    'is_rejected': isRejected,
+    'rejection_reason': rejectionReason,
+    'rejection_note': rejectionNote,
   };
 }
 

@@ -4,4 +4,13 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Allow plain HTTP so the app can reach a local `php artisan serve`
+         backend (http://10.0.2.2:8000/api) during development. Android blocks
+         cleartext by default from targetSdk 28 onwards.
+
+         DEBUG ONLY, deliberately: this file is merged into debug builds and
+         nothing else, so release builds keep the default HTTPS-only policy.
+         Do not move this attribute into src/main/AndroidManifest.xml. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

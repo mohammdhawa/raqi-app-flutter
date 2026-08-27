@@ -4,8 +4,8 @@ import '../../../../core/errors/api_failure.dart';
 import '../../data/attendance_repository.dart';
 import '../../domain/attendance_record.dart';
 
-/// Listing state for the attendance-history screen: paginated records
-/// plus an optional date-range filter (`from`/`to`).
+/// Listing state for the attendance-history screen: paginated records plus
+/// the filters — a date range (`from`/`to`) and the refused-only switch.
 class AttendanceHistoryState {
   const AttendanceHistoryState({
     this.records = const [],
@@ -16,6 +16,7 @@ class AttendanceHistoryState {
     this.isLoadingMore = false,
     this.from,
     this.to,
+    this.rejectedOnly = false,
     this.error,
   });
 
@@ -27,12 +28,18 @@ class AttendanceHistoryState {
   final bool isLoadingMore;
   final DateTime? from;
   final DateTime? to;
+
+  /// Only rows HR refused (`rejected=1`). Off means no `rejected` parameter
+  /// at all — refused and standing rows together, which is the default view.
+  final bool rejectedOnly;
+
   final ApiFailure? error;
 
   bool get isEmpty =>
       records.isEmpty && !isRefreshing && !isLoadingMore && error == null;
   bool get hasMore => currentPage < lastPage;
-  bool get hasFilter => from != null || to != null;
+  bool get hasDateFilter => from != null || to != null;
+  bool get hasFilter => hasDateFilter || rejectedOnly;
 
   AttendanceHistoryState copyWith({
     List<AttendanceRecord>? records,
@@ -50,14 +57,26 @@ class AttendanceHistoryState {
     total: total ?? this.total,
     isRefreshing: isRefreshing ?? this.isRefreshing,
     isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+    // Filters are never changed by a copyWith — they are replaced wholesale
+    // by applyFilter, which restarts the listing from page 1.
     from: from,
     to: to,
+    rejectedOnly: rejectedOnly,
     error: clearError ? null : (error ?? this.error),
   );
 }
 
 class AttendanceHistoryController extends StateNotifier<AttendanceHistoryState> {
-  AttendanceHistoryController(this._repo) : super(const AttendanceHistoryState()) {
+  /// [initialDate] narrows the first load to a single day — how an
+  /// `attendance_rejected` notification opens the history on the day it is
+  /// about. Applied before the first fetch rather than after, so the screen
+  /// never shows an unfiltered page it then has to replace.
+  AttendanceHistoryController(this._repo, {DateTime? initialDate})
+      : super(
+          initialDate == null
+              ? const AttendanceHistoryState()
+              : AttendanceHistoryState(from: initialDate, to: initialDate),
+        ) {
     refresh();
   }
 
@@ -69,6 +88,7 @@ class AttendanceHistoryController extends StateNotifier<AttendanceHistoryState> 
       final page = await _repo.myRecords(
         from: state.from,
         to: state.to,
+        rejected: state.rejectedOnly ? true : null,
         page: 1,
       );
       if (!mounted) return;
@@ -79,6 +99,7 @@ class AttendanceHistoryController extends StateNotifier<AttendanceHistoryState> 
         total: page.total,
         from: state.from,
         to: state.to,
+        rejectedOnly: state.rejectedOnly,
       );
     } on Exception catch (e) {
       if (!mounted) return;
@@ -96,6 +117,7 @@ class AttendanceHistoryController extends StateNotifier<AttendanceHistoryState> 
       final page = await _repo.myRecords(
         from: state.from,
         to: state.to,
+        rejected: state.rejectedOnly ? true : null,
         page: state.currentPage + 1,
       );
       if (!mounted) return;
@@ -115,16 +137,44 @@ class AttendanceHistoryController extends StateNotifier<AttendanceHistoryState> 
     }
   }
 
-  /// Replaces the date-range filter and reloads from page 1.
-  Future<void> applyFilter({DateTime? from, DateTime? to}) async {
-    state = AttendanceHistoryState(from: from, to: to);
+  /// Replaces the filters and reloads from page 1. Omitted arguments are
+  /// cleared, not kept — the callers below pass the whole filter set.
+  Future<void> applyFilter({
+    DateTime? from,
+    DateTime? to,
+    bool rejectedOnly = false,
+  }) async {
+    state = AttendanceHistoryState(
+      from: from,
+      to: to,
+      rejectedOnly: rejectedOnly,
+    );
     await refresh();
   }
+
+  /// Flips the refused-only filter, keeping the date range in place.
+  Future<void> toggleRejectedOnly() => applyFilter(
+        from: state.from,
+        to: state.to,
+        rejectedOnly: !state.rejectedOnly,
+      );
+
+  /// Replaces the date range, keeping the refused-only filter in place.
+  Future<void> applyDateRange({DateTime? from, DateTime? to}) => applyFilter(
+        from: from,
+        to: to,
+        rejectedOnly: state.rejectedOnly,
+      );
 
   Future<void> clearFilter() => applyFilter();
 }
 
-final attendanceHistoryProvider = StateNotifierProvider.autoDispose<
-    AttendanceHistoryController, AttendanceHistoryState>(
-  (ref) => AttendanceHistoryController(ref.watch(attendanceRepositoryProvider)),
+/// Keyed by the day the screen was opened on (`null` for the normal entry
+/// point), so a notification tap can land straight on the right day.
+final attendanceHistoryProvider = StateNotifierProvider.autoDispose.family<
+    AttendanceHistoryController, AttendanceHistoryState, DateTime?>(
+  (ref, initialDate) => AttendanceHistoryController(
+    ref.watch(attendanceRepositoryProvider),
+    initialDate: initialDate,
+  ),
 );

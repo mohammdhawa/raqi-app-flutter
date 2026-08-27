@@ -1,14 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/leave.dart';
+import '../providers/leave_providers.dart';
 import 'leave_status_chip.dart';
 
 /// A single leave request row used by both the "my requests" and the
 /// "approvals" lists. When [showRequester] is true the requester's name is
 /// shown (approvals view); otherwise the approving manager is shown.
-class LeaveRequestTile extends StatelessWidget {
+///
+/// Nothing here switches on the raw `leave_type` string: it holds the Arabic
+/// label on rows filed since types existed and raw free text (`annual`,
+/// `sick`) on older ones, so it is safe to *display* and useless to reason
+/// with. Icons, colours and the balance badge come from [LeaveRequest.leaveTypeId]
+/// and [LeaveRequest.deductsBalance] instead.
+class LeaveRequestTile extends ConsumerWidget {
   const LeaveRequestTile({
     super.key,
     required this.request,
@@ -21,13 +29,27 @@ class LeaveRequestTile extends StatelessWidget {
   final bool showRequester;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final df = DateFormat('yyyy/MM/dd');
+    // An excuse has no approving manager — HR filed it already approved, on
+    // the employee's behalf. Naming the (null) approver "المعتمد" made a row
+    // the employee never submitted look like an ordinary request of theirs.
+    final isExcuse = request.isExcuse;
     final counterpartLabel = showRequester
         ? (request.requesterName ?? 'مقدم الطلب')
-        : (request.managerName ?? 'المعتمد');
-    final counterpartIcon =
-        showRequester ? Icons.person_outline_rounded : Icons.verified_user_outlined;
+        : isExcuse
+            ? 'عذر مسجّل من الموارد البشرية'
+            : (request.managerName ?? 'المعتمد');
+    final counterpartIcon = showRequester
+        ? Icons.person_outline_rounded
+        : isExcuse
+            ? Icons.assignment_ind_outlined
+            : Icons.verified_user_outlined;
+    // The stored label, falling back to the cached vocabulary when the row
+    // carries an id but no text.
+    final typeLabel = (request.leaveType?.isNotEmpty ?? false)
+        ? request.leaveType
+        : ref.watch(leaveTypeByIdProvider(request.leaveTypeId))?.label;
 
     return InkWell(
       onTap: onTap,
@@ -51,8 +73,10 @@ class LeaveRequestTile extends StatelessWidget {
                     color: AppColors.primary.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
-                    Icons.event_available_outlined,
+                  child: Icon(
+                    isExcuse
+                        ? Icons.assignment_turned_in_outlined
+                        : Icons.event_available_outlined,
                     color: AppColors.primary,
                     size: 22,
                   ),
@@ -71,16 +95,25 @@ class LeaveRequestTile extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        _daysLabel(request.days) +
-                            (request.leaveType != null &&
-                                    request.leaveType!.isNotEmpty
-                                ? ' · ${request.leaveType}'
-                                : ''),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.text2,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              _daysLabel(request.days) +
+                                  (typeLabel != null ? ' · $typeLabel' : ''),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.text2,
+                              ),
+                            ),
+                          ),
+                          if (!request.deductsBalance) ...[
+                            const SizedBox(width: 6),
+                            const _NonDeductingBadge(),
+                          ],
+                        ],
                       ),
                     ],
                   ),
@@ -122,5 +155,32 @@ class LeaveRequestTile extends StatelessWidget {
     if (days == 2) return 'يومان';
     if (days <= 10) return '$days أيام';
     return '$days يوماً';
+  }
+}
+
+/// Marks a row whose days were NOT charged to the annual balance. Driven by
+/// the snapshot the request carries, so a type whose policy changed later
+/// still reads the way it was actually charged.
+class _NonDeductingBadge extends StatelessWidget {
+  const _NonDeductingBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.approvedBg,
+        borderRadius: BorderRadius.circular(AppColors.pill),
+      ),
+      child: const Text(
+        'لا تُخصم',
+        style: TextStyle(
+          fontSize: 10,
+          height: 1.4,
+          fontWeight: FontWeight.w700,
+          color: AppColors.approvedText,
+        ),
+      ),
+    );
   }
 }

@@ -54,6 +54,22 @@ class AppNotification {
   /// notifications so navigation can open the relevant request.
   int? get leaveRequestId => _intFromData('leave_request_id');
 
+  /// The refused attendance row's id, from an `attendance_rejected` payload.
+  /// Used only to highlight the matching record — there is no per-record
+  /// screen to open, and no refusal action in this app.
+  int? get recordId => _intFromData('record_id');
+
+  /// The day an `attendance_rejected` notification is about (`Y-m-d`), or
+  /// `null` when absent/unparseable. Date-only, so it compares cleanly against
+  /// the local calendar day the attendance screen shows.
+  DateTime? get rejectionDate {
+    final raw = data['date'];
+    if (raw == null) return null;
+    final parsed = DateTime.tryParse(raw.toString());
+    if (parsed == null) return null;
+    return DateTime(parsed.year, parsed.month, parsed.day);
+  }
+
   int? _intFromData(String key) {
     final raw = data[key];
     if (raw is int) return raw;
@@ -97,6 +113,11 @@ enum NotificationType {
   rejection,
   leave,
   attendanceCheckoutReminder,
+
+  /// HR refused an attendance event — the day now counts as absent and the
+  /// employee is expected to record it again. Distinct from
+  /// [attendanceCheckoutReminder]: that one nudges, this one invalidates.
+  attendanceRejected,
   broadcast,
   general;
 
@@ -108,11 +129,19 @@ enum NotificationType {
         return NotificationType.approval;
       case 'rejection':
         return NotificationType.rejection;
+      // The leave module sends its own event names rather than a bare
+      // `leave`; without these three they fell through to `general` and
+      // rendered with a document icon.
       case 'leave':
       case 'leave_request':
+      case 'leave_request_submitted':
+      case 'leave_request_reviewed':
+      case 'leave_excuse_recorded':
         return NotificationType.leave;
       case 'attendance_checkout_reminder':
         return NotificationType.attendanceCheckoutReminder;
+      case 'attendance_rejected':
+        return NotificationType.attendanceRejected;
       case 'broadcast':
         return NotificationType.broadcast;
       case 'general':

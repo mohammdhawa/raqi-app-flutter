@@ -23,8 +23,8 @@ class ApiClient {
   ApiClient({
     required TokenStorage tokenStorage,
     required OnUnauthenticated onUnauthenticated,
-  }) : _tokenStorage = tokenStorage,
-      _onUnauthenticated = onUnauthenticated {
+  })  : _tokenStorage = tokenStorage,
+        _onUnauthenticated = onUnauthenticated {
     _dio = Dio(
       BaseOptions(
         baseUrl: AppConstants.baseUrl,
@@ -44,12 +44,6 @@ class ApiClient {
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           final token = await _tokenStorage.read();
-          if (kDebugMode) {
-            debugPrint(
-              'REQUEST ${options.method} ${options.path} - token: '
-              '${token == null ? "NULL" : "present (${token.length} chars)"}',
-            );
-          }
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
@@ -86,17 +80,39 @@ class ApiClient {
       ),
     );
 
-    // Logging (debug only).
+    // Logging (debug builds only, and deliberately metadata-only).
+    //
+    // Dio's LogInterceptor used to sit here with `requestHeader` and
+    // `requestBody` on, which wrote the `Authorization: Bearer …` header of
+    // every call and the full body of `POST /login` — password included — to
+    // the device log, where any app holding READ_LOGS on older Androids and
+    // anyone with the device attached to `adb`/Xcode can read them. Method,
+    // path and status are enough to debug a request; the parts that identify
+    // or authenticate the user are not logged at all rather than being
+    // masked, so there is nothing to leak if the mask is ever wrong.
     if (kDebugMode) {
       _dio.interceptors.add(
-        LogInterceptor(
-          request: true,
-          requestHeader: true,
-          requestBody: true,
-          responseHeader: false,
-          responseBody: true,
-          error: true,
-          logPrint: (obj) => debugPrint(obj.toString()),
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            debugPrint('→ ${options.method} ${options.path}');
+            handler.next(options);
+          },
+          onResponse: (response, handler) {
+            debugPrint(
+              '← ${response.statusCode} ${response.requestOptions.path}',
+            );
+            handler.next(response);
+          },
+          onError: (error, handler) {
+            final failure = error.error;
+            final code =
+                failure is ApiFailure ? failure.code.name : error.type.name;
+            debugPrint(
+              '✖ ${error.response?.statusCode ?? '-'} '
+              '${error.requestOptions.path} ($code)',
+            );
+            handler.next(error);
+          },
         ),
       );
     }
@@ -135,12 +151,31 @@ class ApiClient {
       message: message,
       statusCode: response.statusCode,
       fieldErrors: fieldErrors,
+      retryAfter: _retryAfterFrom(response),
     );
   }
 
+  /// Seconds still to wait, for a throttled (429) response.
+  ///
+  /// The login throttle sends `retry_after` in the body and mirrors it in the
+  /// standard `Retry-After` header; the framework's own `throttle:api` limiter
+  /// sends only the header. Reading both means a client that trips either one
+  /// gets a usable countdown.
+  int? _retryAfterFrom(Response response) {
+    final data = response.data;
+    if (data is Map) {
+      final raw = data['retry_after'];
+      final parsed =
+          raw is num ? raw.toInt() : int.tryParse(raw?.toString() ?? '');
+      if (parsed != null && parsed >= 0) return parsed;
+    }
+    final header = response.headers.value('retry-after');
+    final parsed = int.tryParse(header ?? '');
+    return (parsed != null && parsed >= 0) ? parsed : null;
+  }
+
   ApiFailure _failureFromException(DioException e) {
-    final isNetwork =
-        e.type == DioExceptionType.connectionTimeout ||
+    final isNetwork = e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.sendTimeout ||
         e.type == DioExceptionType.receiveTimeout ||
         e.type == DioExceptionType.connectionError ||

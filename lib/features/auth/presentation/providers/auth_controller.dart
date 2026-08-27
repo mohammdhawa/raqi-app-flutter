@@ -7,6 +7,7 @@ import '../../../../core/network/api_client.dart';
 import '../../data/auth_repository.dart';
 import '../../domain/user.dart';
 import '../../../../core/services/push_notification_service.dart';
+import '../../../../core/services/session_cleanup.dart';
 
 
 /// Three possible auth states.
@@ -30,8 +31,12 @@ class AuthUnauthenticated extends AuthState {
 /// Holds the current session. The router watches this to decide between
 /// /login and /home.
 class AuthController extends StateNotifier<AuthState> {
-  AuthController(this._repo, this._unauthenticatedSignal, this._pushService)
-    : super(const AuthInitial()) {
+  AuthController(
+    this._repo,
+    this._unauthenticatedSignal,
+    this._pushService,
+    this._sessionCleanup,
+  ) : super(const AuthInitial()) {
     _unauthenticatedSignal.addListener(_onForcedLogout);
     _bootstrap();
   }
@@ -39,6 +44,15 @@ class AuthController extends StateNotifier<AuthState> {
   final AuthRepository _repo;
   final UnauthenticatedSignal _unauthenticatedSignal;
   final PushNotificationService _pushService;
+
+  /// Drops the caches this app fills on a session's behalf — document images
+  /// and the leave-type vocabulary — neither of which is keyed by account.
+  ///
+  /// It lives on this class because this class is where a session ends. The
+  /// alternative, a listener elsewhere watching for the state transition, is
+  /// the same idea with a failure mode: if it is not registered, nothing says
+  /// so, and cached pages quietly outlive the token that fetched them.
+  final SessionCleanup _sessionCleanup;
 
   static const _bootstrapTimeout = Duration(seconds: 10);
 
@@ -95,6 +109,10 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> login(String email, String password) async {
     final result = await _repo.login(email: email, password: password);
+    // Before this session gets to cache anything of its own: a previous
+    // session that ended when the process was killed never ran the wipe in
+    // logout(), so on a shared device its documents could still be on disk.
+    await _sessionCleanup.run();
     state = AuthAuthenticated(result.user);
     // Register the FCM token after login — off the critical path so a slow or
     // unavailable Play Services can't stall (or fail) an otherwise good login.
@@ -108,6 +126,10 @@ class AuthController extends StateNotifier<AuthState> {
     // account we are signing out of.
     await _pushService.endSession();
     await _repo.logout();
+    // Awaited, and before the state flips: access has just been revoked, so
+    // nothing this session cached may still be sitting on disk once the app
+    // is showing the login screen.
+    await _sessionCleanup.run();
     state = const AuthUnauthenticated();
   }
 
@@ -118,6 +140,9 @@ class AuthController extends StateNotifier<AuthState> {
     // left to authorise a DELETE, and attempting one from here would 401 and
     // re-enter this very method. See PushNotificationService.invalidateSession.
     _pushService.invalidateSession();
+    // Not awaited — this is a synchronous callback off the API client — but it
+    // is the same wipe: a revoked session's cached pages must go too.
+    unawaited(_sessionCleanup.run());
     state = const AuthUnauthenticated();
   }
 
@@ -133,7 +158,8 @@ final authControllerProvider =
       return AuthController(
         ref.watch(authRepositoryProvider),
         ref.watch(unauthenticatedSignalProvider),
-        ref.watch(pushNotificationServiceProvider),  // add this
+        ref.watch(pushNotificationServiceProvider),
+        ref.watch(sessionCleanupProvider),
       );
     });
 

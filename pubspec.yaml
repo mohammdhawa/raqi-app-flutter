@@ -35,6 +35,11 @@ dependencies:
   # UI / Fonts
   google_fonts: ^6.2.1
   cached_network_image: ^3.3.1
+  # The disk store behind cached_network_image. Already pulled in
+  # transitively; declared directly because the app clears it itself when a
+  # session ends (core/services/media_cache.dart) — protected document images
+  # must not outlive the token that authorized them.
+  flutter_cache_manager: ^3.4.1
   cupertino_icons: ^1.0.8
 
   # Files

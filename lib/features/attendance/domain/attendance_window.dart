@@ -4,27 +4,40 @@
 /// every record and rejects with HTTP 422 + an Arabic `message`.
 ///
 /// Context (single timezone Asia/Damascus, single shift, no overnight):
-///   • Every day is a working day — Friday & Saturday included.
+///   • There is no weekly day off — `working_days` lists all seven days.
 ///   • Check-in is open 24 hours; there is no time-of-day window.
 ///
-/// These mirror the server config (`working_days` = all 7 days, empty
+/// These mirror the server config (`working_days = [0,1,2,3,4,5,6]`, empty
 /// check-in window). Leave / duplicate / leave-overlap checks stay
-/// server-side, so there is no day/time reason to block check-in here.
+/// server-side, so there is no day or time reason to block check-in here.
+///
+/// The weekly calendar is server configuration and has changed more than
+/// once. The mirror below therefore stays deliberately PERMISSIVE: a day off
+/// the device does not know about costs a round trip and an Arabic server
+/// message, while a day off the device invents blocks a check-in the server
+/// would have accepted — and leaves the employee with no way through. Never
+/// hardcode a weekend here; if a day-off calendar comes back (a public
+/// holiday list is the likely next form), it has to arrive from the API.
 library;
 
-/// Every day is a working day (weekends included). Also drives the leave
-/// preview's chargeable-day count (see [workingDaysBetween] in leave.dart),
-/// so weekends now count toward leave balance too.
+/// Whether [d] is a working day. Every day currently is, mirroring the
+/// backend's `attendance.working_days` (`[0,1,2,3,4,5,6]`, Sunday=0). Also
+/// drives the leave preview's counted days (see [workingDaysBetween] in
+/// leave.dart), which the server computes from the same calendar.
 bool isWorkingDay(DateTime d) => true;
 
 /// Check-in is open 24 hours; there is no time-of-day restriction.
 bool isWithinCheckInWindow(DateTime now) => true;
 
 /// Returns an Arabic reason the user can't check in right now, or `null`
-/// when check-in is currently allowed. Day and time no longer block
-/// check-in (open 24/7); the remaining rules (leave, duplicate) are enforced
-/// server-side, so this is always `null` today. Kept as the single hook the
-/// check-in screen calls, so a future client-side pre-check has one home.
+/// when check-in is currently allowed.
+///
+/// Always `null` today: with every day a working day and check-in open 24/7,
+/// nothing about the calendar is predictable enough to pre-block, and the
+/// remaining rules (approved leave, duplicate check-in) are enforced
+/// server-side — their 422 message is surfaced on the record's own tile.
+/// Kept as the single hook the check-in screen calls, so a future
+/// client-side pre-check has one home.
 String? checkInBlockedReason(DateTime now) => null;
 
 /// Default minimum minutes that must elapse between a check-in and its

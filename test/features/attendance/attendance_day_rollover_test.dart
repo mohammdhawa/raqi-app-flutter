@@ -23,6 +23,7 @@ class _FakeAttendanceRepository extends Fake implements AttendanceRepository {
     DateTime? date,
     DateTime? from,
     DateTime? to,
+    bool? rejected,
     int page = 1,
   }) async =>
       this.page;

@@ -84,9 +84,8 @@ class _TemplatePickerScreenState extends ConsumerState<TemplatePickerScreen> {
       );
       if (!mounted) return;
       setState(() {
-        _templates = reset
-            ? result.templates
-            : [..._templates, ...result.templates];
+        _templates =
+            reset ? result.templates : [..._templates, ...result.templates];
         _currentPage = result.currentPage;
         _lastPage = result.lastPage;
         _isLoading = false;
@@ -318,12 +317,22 @@ class _TemplatePickerScreenState extends ConsumerState<TemplatePickerScreen> {
                 color: AppColors.text3,
               ),
               const SizedBox(height: 12),
+              // An empty list is NOT necessarily "no templates exist". With
+              // `generation_enabled` off the backend serves an empty template
+              // listing on purpose, so the feature being unavailable and the
+              // department having no templates look identical from here —
+              // say both rather than implying someone forgot to add one.
               Text(
                 _searchQuery.isNotEmpty
                     ? 'لا توجد نتائج لـ "$_searchQuery"'
-                    : 'لا توجد قوالب متاحة حالياً.',
+                    : 'لا توجد قوالب متاحة حالياً، أو أن إنشاء المستندات من '
+                        'القوالب متوقف مؤقتاً.\nيمكنك إنشاء مستند برفع ملف.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.text2, fontSize: 14),
+                style: const TextStyle(
+                  color: AppColors.text2,
+                  fontSize: 14,
+                  height: 1.6,
+                ),
               ),
             ],
           ),

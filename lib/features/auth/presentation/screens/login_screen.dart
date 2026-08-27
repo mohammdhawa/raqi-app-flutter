@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -22,14 +24,48 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isSubmitting = false;
   String? _errorMessage;
 
+  /// Seconds left on a `too_many_attempts` lockout. Null when not locked out.
+  int? _lockoutSeconds;
+  Timer? _lockoutTimer;
+
+  bool get _isLockedOut => (_lockoutSeconds ?? 0) > 0;
+
   @override
   void dispose() {
+    _lockoutTimer?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
+  /// Runs the lockout down to zero, re-enabling the button when it lifts.
+  ///
+  /// The backend reports time REMAINING, not the full lockout, so a user who
+  /// comes back part-way through a lockout is told what is actually left.
+  void _startLockout(int seconds) {
+    _lockoutTimer?.cancel();
+    setState(() => _lockoutSeconds = seconds);
+    _lockoutTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      final left = (_lockoutSeconds ?? 0) - 1;
+      setState(() => _lockoutSeconds = left > 0 ? left : null);
+      if (left <= 0) timer.cancel();
+    });
+  }
+
+  /// `2:05` above a minute, plain seconds below it.
+  static String _formatCountdown(int seconds) {
+    if (seconds < 60) return '$seconds ثانية';
+    final minutes = seconds ~/ 60;
+    final rest = seconds % 60;
+    return '$minutes:${rest.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _submit() async {
+    if (_isLockedOut) return;
     if (!_formKey.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
     setState(() {
@@ -42,6 +78,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           .login(_emailController.text.trim(), _passwordController.text);
       // Router redirect handles navigation.
     } on ApiFailure catch (failure) {
+      // Throttled (backend v10). The message is a complete Arabic sentence
+      // naming the wait, so it is shown as-is; `retry_after` additionally
+      // drives a live countdown and keeps the button disabled meanwhile, so
+      // hammering the button cannot spend more of the budget.
+      //
+      // Deliberately NOT branched on separately: an unknown email and a wrong
+      // password. The backend answers those identically — same status, same
+      // body, same headers — precisely so the screen cannot tell them apart,
+      // and neither should this code.
+      if (failure.code == ApiErrorCode.tooManyAttempts) {
+        final retryAfter = failure.retryAfter;
+        setState(() {
+          _errorMessage =
+              arabicMessageFor(failure.code, fallback: failure.message);
+        });
+        if (retryAfter != null && retryAfter > 0) _startLockout(retryAfter);
+        return;
+      }
       final emailFieldError = failure.firstErrorFor('email');
       setState(() {
         _errorMessage = emailFieldError ?? failure.message;
@@ -247,8 +301,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               style: TextButton.styleFrom(
                                 padding: EdgeInsets.zero,
                                 minimumSize: Size.zero,
-                                tapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               child: const Text(
                                 'نسيت كلمة المرور؟',
@@ -269,7 +322,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           SizedBox(
                             height: 52,
                             child: ElevatedButton(
-                              onPressed: _isSubmitting ? null : _submit,
+                              onPressed: (_isSubmitting || _isLockedOut)
+                                  ? null
+                                  : _submit,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF224167),
                                 disabledBackgroundColor:
@@ -289,27 +344,42 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                         color: Colors.white,
                                       ),
                                     )
-                                  : const Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          'تسجيل الدخول',
-                                          style: TextStyle(
+                                  : _isLockedOut
+                                      // Live countdown, so the wait is
+                                      // visible rather than a dead button.
+                                      ? Text(
+                                          'إعادة المحاولة بعد '
+                                          '${_formatCountdown(_lockoutSeconds!)}',
+                                          key: const Key(
+                                              'login-lockout-countdown'),
+                                          style: const TextStyle(
                                             fontFamily: 'Cairo',
                                             fontSize: 15,
                                             fontWeight: FontWeight.w700,
                                             color: Colors.white,
                                           ),
+                                        )
+                                      : const Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Text(
+                                              'تسجيل الدخول',
+                                              style: TextStyle(
+                                                fontFamily: 'Cairo',
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w700,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                            SizedBox(width: 8),
+                                            Icon(
+                                              Icons.arrow_forward,
+                                              size: 18,
+                                              color: Colors.white,
+                                            ),
+                                          ],
                                         ),
-                                        SizedBox(width: 8),
-                                        Icon(
-                                          Icons.arrow_forward,
-                                          size: 18,
-                                          color: Colors.white,
-                                        ),
-                                      ],
-                                    ),
                             ),
                           ),
 

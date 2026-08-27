@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,9 +8,9 @@ import 'package:share_plus/share_plus.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 import '../../../../core/errors/api_failure.dart';
-import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_constants.dart';
+import '../../../../shared/widgets/authed_network_image.dart';
 import '../../../../shared/widgets/state_views.dart';
 import '../../../../shared/widgets/status_chip.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
@@ -90,8 +89,7 @@ class DocumentDetailsScreen extends ConsumerStatefulWidget {
       _DocumentDetailsScreenState();
 }
 
-class _DocumentDetailsScreenState
-    extends ConsumerState<DocumentDetailsScreen> {
+class _DocumentDetailsScreenState extends ConsumerState<DocumentDetailsScreen> {
   int get documentId => widget.documentId;
 
   // ── Delete ────────────────────────────────────────────────────────────────
@@ -201,9 +199,7 @@ class _DocumentDetailsScreenState
     for (final type in DocumentListType.values) {
       final exists = ref.exists(documentsListProvider(type));
       if (exists) {
-        ref
-            .read(documentsListProvider(type).notifier)
-            .replaceDocument(updated);
+        ref.read(documentsListProvider(type).notifier).replaceDocument(updated);
       }
     }
   }
@@ -237,8 +233,7 @@ class _DocumentDetailsScreenState
   Widget build(BuildContext context) {
     final state = ref.watch(documentDetailsProvider(documentId));
     final user = ref.watch(currentUserProvider);
-    final controller =
-        ref.read(documentDetailsProvider(documentId).notifier);
+    final controller = ref.read(documentDetailsProvider(documentId).notifier);
 
     final doc = state.document;
     final statusLabel = doc != null ? _statusLabel(doc.status) : '';
@@ -416,14 +411,19 @@ class _DetailsBodyState extends State<_DetailsBody> {
         children: [
           _Header(document: doc),
           const SizedBox(height: 16),
+          // ONE file card, stamped or not. There used to be a second
+          // "النسخة المختومة" card below this one, but `GET /documents/{id}/file`
+          // serves `stamped_file_path` whenever it exists — so once a document
+          // was stamped both cards previewed, downloaded and shared the exact
+          // same PDF, differing only in the filename they suggested. The card
+          // below now says which version it is holding.
           _FilePreviewCard(document: doc),
-          if (doc.stampedFilePath != null) ...[
-            const SizedBox(height: 12),
-            _StampedPdfCard(document: doc),
-          ],
           if (doc.attachments.isNotEmpty) ...[
             const SizedBox(height: 16),
-            _AttachmentsCard(attachments: doc.attachments),
+            _AttachmentsCard(
+              documentId: doc.id,
+              attachments: doc.attachments,
+            ),
           ],
           const SizedBox(height: 16),
           _WorkflowCard(document: doc),
@@ -669,24 +669,33 @@ class _FilePreviewCard extends ConsumerStatefulWidget {
 }
 
 class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
+  /// The authenticated endpoint that streams this document's current file.
+  ///
+  /// `file_path` is still what tells us a file exists at all, but it is
+  /// metadata — the bytes come from `GET /documents/{id}/file`, not from a
+  /// `/storage/{file_path}` URL (which is served unauthenticated).
+  ///
+  /// A stamped copy counts as a file even if `file_path` is somehow absent:
+  /// the endpoint serves `stamped_file_path ?: file_path`, so there are bytes
+  /// to fetch either way, and this card is now the only place offering them.
   String? get _fileUrl {
-    final path = widget.document.filePath;
-    if (path == null) return null;
-    return '${AppConstants.storageBase}/storage/$path';
+    if (widget.document.filePath == null &&
+        !widget.document.servesStampedFile) {
+      return null;
+    }
+    return AppConstants.documentFileUrl(widget.document.id);
   }
 
-  bool get _isPdf {
-    final mime = widget.document.fileMime ?? '';
-    if (mime.isNotEmpty) return mime == 'application/pdf';
-    return (widget.document.filePath ?? '').toLowerCase().endsWith('.pdf');
-  }
+  /// Filename for downloads/sharing — `.pdf` once a stamped copy is what the
+  /// endpoint serves, whatever was originally uploaded.
+  String get _downloadFileName => widget.document.servedFileName;
 
-  bool get _isImage {
-    final mime = widget.document.fileMime ?? '';
-    if (mime.isNotEmpty) return mime.startsWith('image/');
-    final ext = (widget.document.filePath ?? '').toLowerCase().split('.').last;
-    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
-  }
+  // These describe the BYTES THE ENDPOINT RETURNS, not the upload. After the
+  // first approval that is a stamped PDF even for a document uploaded as a
+  // JPEG or a .docx — see Document.servesStampedFile.
+  bool get _isPdf => widget.document.servedIsPdf;
+
+  bool get _isImage => widget.document.servedIsImage;
 
   Future<void> _openPreview() async {
     final url = _fileUrl;
@@ -701,7 +710,7 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
         barrierColor: Colors.black87,
         builder: (_) => _PdfPreviewDialog(
           url: url,
-          fileName: widget.document.fileName ?? url.split('/').last,
+          fileName: _downloadFileName,
           token: token,
         ),
       );
@@ -711,7 +720,7 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
         barrierColor: Colors.black87,
         builder: (_) => _ImagePreviewDialog(
           url: url,
-          fileName: widget.document.fileName ?? url.split('/').last,
+          fileName: _downloadFileName,
         ),
       );
     } else {
@@ -764,11 +773,10 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
                           ),
                         ),
                       ),
-                      CachedNetworkImage(
-                        imageUrl: url,
+                      AuthedNetworkImage(
+                        url: url,
                         fit: BoxFit.cover,
-                        placeholder: (_, __) => const SizedBox.shrink(),
-                        errorWidget: (_, __, ___) => const Center(
+                        errorWidget: const Center(
                           child: Icon(
                             Icons.broken_image_outlined,
                             size: 48,
@@ -784,10 +792,9 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF0D1828)
-                                .withValues(alpha: 0.75),
-                            borderRadius:
-                                BorderRadius.circular(AppColors.pill),
+                            color:
+                                const Color(0xFF0D1828).withValues(alpha: 0.75),
+                            borderRadius: BorderRadius.circular(AppColors.pill),
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
@@ -847,14 +854,29 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        doc.fileName ?? 'ملف مرفق',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              // The name of what will actually be fetched, so
+                              // the label cannot promise a .docx and hand over
+                              // a PDF.
+                              _downloadFileName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          // Carries what the removed stamped card used to say:
+                          // these bytes are the stamped copy, not the upload.
+                          if (doc.servesStampedFile) ...[
+                            const SizedBox(width: 6),
+                            const _StampedBadge(),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -888,7 +910,7 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
                 if (url != null)
                   _FileActionButtons(
                     url: url,
-                    fileName: doc.fileName ?? url.split('/').last,
+                    fileName: _downloadFileName,
                     requiresAuth: true,
                   ),
               ],
@@ -900,6 +922,16 @@ class _FilePreviewCardState extends ConsumerState<_FilePreviewCard> {
   }
 
   String _formatMeta(Document doc) {
+    // `file_size` measures the upload. Once the stamped copy is what gets
+    // served, its size is not reported anywhere, so showing the old number
+    // would just be wrong — name the version instead. Final vs. interim is
+    // the distinction the removed stamped card drew, and it still matters:
+    // an in-progress stamp is a snapshot that will change again.
+    if (doc.servesStampedFile) {
+      return doc.status == DocumentStatus.approved
+          ? 'النسخة النهائية المعتمدة'
+          : 'نسخة مؤقتة — قيد المراجعة';
+    }
     return _formatSize(doc.fileSize);
   }
 
@@ -936,13 +968,13 @@ class _ImagePreviewDialog extends StatelessWidget {
             child: InteractiveViewer(
               minScale: 0.5,
               maxScale: 5.0,
-              child: CachedNetworkImage(
-                imageUrl: url,
+              child: AuthedNetworkImage(
+                url: url,
                 fit: BoxFit.contain,
-                placeholder: (_, __) => const Center(
+                placeholder: const Center(
                   child: CircularProgressIndicator(color: Colors.white),
                 ),
-                errorWidget: (_, __, ___) => const Center(
+                errorWidget: const Center(
                   child: Icon(Icons.broken_image_outlined,
                       color: Colors.white54, size: 64),
                 ),
@@ -951,8 +983,7 @@ class _ImagePreviewDialog extends StatelessWidget {
           ),
           SafeArea(
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: Row(
                 children: [
                   IconButton(
@@ -1003,8 +1034,7 @@ class _PdfPreviewDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final headers = <String, String>{
       'Accept': 'application/pdf',
-      if (token != null && token!.isNotEmpty)
-        'Authorization': 'Bearer $token',
+      if (token != null && token!.isNotEmpty) 'Authorization': 'Bearer $token',
     };
 
     return Dialog.fullscreen(
@@ -1014,8 +1044,7 @@ class _PdfPreviewDialog extends StatelessWidget {
           children: [
             Container(
               color: Colors.black87,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: Row(
                 children: [
                   IconButton(
@@ -1057,127 +1086,44 @@ class _PdfPreviewDialog extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Stamped PDF card
+// Stamped-copy badge
 // ---------------------------------------------------------------------------
 
-class _StampedPdfCard extends ConsumerWidget {
-  const _StampedPdfCard({required this.document});
-  final Document document;
+/// Marks the file card as holding the stamped copy rather than the upload.
+///
+/// This replaces the separate "النسخة المختومة" card. That card fetched
+/// `GET /documents/{id}/stamped-pdf`, which serves the same
+/// `stamped_file_path` bytes the main file endpoint already returns once a
+/// stamp exists — so it duplicated the preview, download and share controls
+/// for an identical PDF. Only the labelling was worth keeping, and a badge
+/// plus the card's version line carry it.
+class _StampedBadge extends StatelessWidget {
+  const _StampedBadge();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isFinal = document.status == DocumentStatus.approved;
-    final url =
-        '${AppConstants.storageBase}/api/documents/${document.id}/stamped-pdf';
-    final fileName = isFinal
-        ? '${document.title} (معتمد).pdf'
-        : '${document.title} (قيد المراجعة).pdf';
-
-    return GestureDetector(
-      onTap: () async {
-        final storage = ref.read(tokenStorageProvider);
-        final token = await storage.read();
-        if (!context.mounted) return;
-        await showDialog<void>(
-          context: context,
-          barrierColor: Colors.black87,
-          builder: (_) => _PdfPreviewDialog(
-            url: url,
-            fileName: fileName,
-            token: token,
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppColors.pill),
+        border: Border.all(color: AppColors.accent.withValues(alpha: 0.5)),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.verified, size: 12, color: AppColors.accent),
+          SizedBox(width: 4),
+          Text(
+            'مختومة',
+            style: TextStyle(
+              fontSize: 10,
+              height: 1.4,
+              fontWeight: FontWeight.w700,
+              color: AppColors.accent,
+            ),
           ),
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.accent, width: 1.5),
-          gradient: LinearGradient(
-            colors: [
-              AppColors.accent.withValues(alpha: 0.05),
-              AppColors.accent.withValues(alpha: 0.02),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.verified,
-                color: AppColors.accent,
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'النسخة المختومة',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    isFinal ? 'النسخة النهائية المعتمدة' : 'قيد المراجعة — نسخة مؤقتة',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.text2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            GestureDetector(
-              onTap: () async {
-                final storage = ref.read(tokenStorageProvider);
-                final token = await storage.read();
-                if (!context.mounted) return;
-                await showDialog<void>(
-                  context: context,
-                  barrierColor: Colors.black87,
-                  builder: (_) => _PdfPreviewDialog(
-                    url: url,
-                    fileName: fileName,
-                    token: token,
-                  ),
-                );
-              },
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppColors.bg,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.accent),
-                ),
-                child: const Icon(
-                  Icons.visibility_outlined,
-                  color: AppColors.accent,
-                  size: 18,
-                ),
-              ),
-            ),
-            _FileActionButtons(
-              url: url,
-              fileName: fileName,
-              requiresAuth: true,
-              accentColor: AppColors.accent,
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -1188,7 +1134,13 @@ class _StampedPdfCard extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 
 class _AttachmentsCard extends StatelessWidget {
-  const _AttachmentsCard({required this.attachments});
+  const _AttachmentsCard({
+    required this.documentId,
+    required this.attachments,
+  });
+
+  /// The parent document's id — the attachment endpoint is nested under it.
+  final int documentId;
   final List<DocumentAttachment> attachments;
 
   @override
@@ -1209,7 +1161,10 @@ class _AttachmentsCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           for (var i = 0; i < attachments.length; i++) ...[
-            _AttachmentTile(attachment: attachments[i]),
+            _AttachmentTile(
+              documentId: documentId,
+              attachment: attachments[i],
+            ),
             if (i < attachments.length - 1) const SizedBox(height: 10),
           ],
         ],
@@ -1219,11 +1174,21 @@ class _AttachmentsCard extends StatelessWidget {
 }
 
 class _AttachmentTile extends ConsumerWidget {
-  const _AttachmentTile({required this.attachment});
+  const _AttachmentTile({
+    required this.documentId,
+    required this.attachment,
+  });
+
+  /// Passed down from the parent document rather than read off the
+  /// attachment, so the tile is bound to the document it is rendered under.
+  final int documentId;
   final DocumentAttachment attachment;
 
+  /// `GET /documents/{id}/attachments/{attachmentId}/file` — authorized
+  /// through the parent document's `view` ability. `attachment.filePath`
+  /// remains metadata and is not turned into a `/storage` URL.
   String get _url =>
-      '${AppConstants.storageBase}/storage/${attachment.filePath}';
+      AppConstants.documentAttachmentFileUrl(documentId, attachment.id);
 
   Future<void> _openPreview(BuildContext context, WidgetRef ref) async {
     if (attachment.isPdf) {
@@ -1502,8 +1467,7 @@ class _LogsList extends StatelessWidget {
                             ),
                           ),
                           child: Padding(
-                            padding:
-                                const EdgeInsets.only(right: dashSpace),
+                            padding: const EdgeInsets.only(right: dashSpace),
                           ),
                         ),
                       );
@@ -1526,35 +1490,35 @@ class _LogTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final (icon, bgColor, fgColor, label) = switch (log.action) {
       LogAction.created => (
-        Icons.note_add_outlined,
-        AppColors.primary.withValues(alpha: 0.10),
-        AppColors.primary,
-        'تم إنشاء المستند',
-      ),
+          Icons.note_add_outlined,
+          AppColors.primary.withValues(alpha: 0.10),
+          AppColors.primary,
+          'تم إنشاء المستند',
+        ),
       LogAction.sent => (
-        Icons.send_outlined,
-        AppColors.accent.withValues(alpha: 0.12),
-        AppColors.pendingText,
-        'تم إرسال المستند للاعتماد',
-      ),
+          Icons.send_outlined,
+          AppColors.accent.withValues(alpha: 0.12),
+          AppColors.pendingText,
+          'تم إرسال المستند للاعتماد',
+        ),
       LogAction.approved => (
-        Icons.check_circle_outline,
-        AppColors.approvedBg,
-        AppColors.approved,
-        'اعتمد المستند',
-      ),
+          Icons.check_circle_outline,
+          AppColors.approvedBg,
+          AppColors.approved,
+          'اعتمد المستند',
+        ),
       LogAction.rejected => (
-        Icons.cancel_outlined,
-        AppColors.rejectedBg,
-        AppColors.rejected,
-        'رفض المستند',
-      ),
+          Icons.cancel_outlined,
+          AppColors.rejectedBg,
+          AppColors.rejected,
+          'رفض المستند',
+        ),
       _ => (
-        Icons.info_outline,
-        AppColors.primary.withValues(alpha: 0.10),
-        AppColors.text2,
-        'حدث',
-      ),
+          Icons.info_outline,
+          AppColors.primary.withValues(alpha: 0.10),
+          AppColors.text2,
+          'حدث',
+        ),
     };
 
     return Padding(
@@ -1636,13 +1600,16 @@ class _FileActionButtons extends ConsumerStatefulWidget {
     required this.url,
     required this.fileName,
     this.requiresAuth = false,
-    this.accentColor,
   });
 
   final String url;
   final String fileName;
   final bool requiresAuth;
-  final Color? accentColor;
+
+  // There was also an `accentColor`, used only by the removed stamped-copy
+  // card to tint these buttons gold. With one file card left there is one
+  // tone, so the parameter and its branches are gone rather than sitting
+  // unused.
 
   @override
   ConsumerState<_FileActionButtons> createState() => _FileActionButtonsState();
@@ -1727,7 +1694,7 @@ class _FileActionButtonsState extends ConsumerState<_FileActionButtons> {
     required VoidCallback? onTap,
     bool loading = false,
   }) {
-    final color = widget.accentColor ?? AppColors.text2;
+    const color = AppColors.text2;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1736,9 +1703,6 @@ class _FileActionButtonsState extends ConsumerState<_FileActionButtons> {
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(8),
-          border: widget.accentColor != null
-              ? Border.all(color: widget.accentColor!)
-              : null,
         ),
         child: loading
             ? Padding(
@@ -2063,9 +2027,7 @@ class _CommentsCardState extends ConsumerState<_CommentsCard> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref
-          .read(documentCommentsProvider(widget.documentId).notifier)
-          .load();
+      ref.read(documentCommentsProvider(widget.documentId).notifier).load();
     });
   }
 
@@ -2279,8 +2241,8 @@ class _CommentTile extends StatelessWidget {
                 if (comment.visibility == 'approvers') ...[
                   const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: AppColors.accentSoft,
                       borderRadius: BorderRadius.circular(AppColors.pill),
@@ -2365,8 +2327,7 @@ class _VisibilityDropdown extends StatelessWidget {
           ),
           items: const [
             DropdownMenuItem(value: 'all', child: Text('الكل')),
-            DropdownMenuItem(
-                value: 'approvers', child: Text('المعتمدون فقط')),
+            DropdownMenuItem(value: 'approvers', child: Text('المعتمدون فقط')),
           ],
           onChanged: (v) {
             if (v != null) onChanged(v);

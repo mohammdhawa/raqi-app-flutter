@@ -254,8 +254,62 @@ class Document {
     return nextPendingUsers.any((u) => u.id == user.id);
   }
 
-  bool isImage() => (fileMime ?? '').startsWith('image/');
-  bool isPdf() => fileMime == 'application/pdf';
+  // ── What `GET /documents/{id}/file` actually serves ─────────────────
+  //
+  // The endpoint streams `stamped_file_path ?: file_path`, so once a single
+  // approver has signed, it returns the freshly rendered stamped PDF — NOT
+  // the file that was uploaded. `file_mime` and `file_name` still describe
+  // the upload, and the backend says so at DocumentController::file():
+  // "derive the type from whichever file is actually being served rather
+  // than trusting that column".
+  //
+  // Trusting `file_mime` here previewed PDF bytes in an image viewer and
+  // saved them as `report.docx`. There are deliberately no `isPdf()` /
+  // `isImage()` helpers reading `file_mime` any more — a caller reaching for
+  // one to decide how to render fetched bytes is the bug itself.
+
+  /// True once a stamped copy exists, i.e. the file endpoint no longer
+  /// returns the original upload.
+  bool get servesStampedFile => stampedFilePath != null;
+
+  /// MIME type of the bytes the file endpoint returns.
+  String? get servedMime => servesStampedFile ? 'application/pdf' : fileMime;
+
+  bool get servedIsPdf {
+    if (servesStampedFile) return true;
+    final mime = fileMime ?? '';
+    if (mime.isNotEmpty) return mime == 'application/pdf';
+    return (filePath ?? '').toLowerCase().endsWith('.pdf');
+  }
+
+  bool get servedIsImage {
+    // A stamped document is a PDF whatever was uploaded.
+    if (servesStampedFile) return false;
+    final mime = fileMime ?? '';
+    if (mime.isNotEmpty) return mime.startsWith('image/');
+    final ext = (filePath ?? '').toLowerCase().split('.').last;
+    return const ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
+  }
+
+  /// Filename to save the fetched bytes under.
+  ///
+  /// The URL no longer ends in a filename, so it cannot be the fallback. When
+  /// a stamped copy is being served the extension is forced to `.pdf`, so an
+  /// uploaded `تقرير.docx` downloads as `تقرير.pdf` rather than as a Word
+  /// file Windows then refuses to open.
+  String get servedFileName {
+    final base = fileName ?? _basename(filePath) ?? 'document-$id';
+    if (!servesStampedFile) return base;
+    final dot = base.lastIndexOf('.');
+    final stem = dot > 0 ? base.substring(0, dot) : base;
+    return '$stem.pdf';
+  }
+
+  static String? _basename(String? path) {
+    if (path == null || path.isEmpty) return null;
+    final base = path.split(RegExp(r'[/\\]')).last;
+    return base.isEmpty ? null : base;
+  }
 
   factory Document.fromJson(
     Map<String, dynamic> json, {
