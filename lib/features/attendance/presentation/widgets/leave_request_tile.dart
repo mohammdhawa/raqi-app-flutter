@@ -50,6 +50,7 @@ class LeaveRequestTile extends ConsumerWidget {
     final typeLabel = (request.leaveType?.isNotEmpty ?? false)
         ? request.leaveType
         : ref.watch(leaveTypeByIdProvider(request.leaveTypeId))?.label;
+    final chainProgress = _chainProgressLabel(request);
 
     return InkWell(
       onTap: onTap,
@@ -144,6 +145,31 @@ class LeaveRequestTile extends ConsumerWidget {
                 ),
               ],
             ),
+            if (chainProgress != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.account_tree_outlined,
+                    size: 14,
+                    color: AppColors.pendingText,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      chainProgress,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.pendingText,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -155,6 +181,27 @@ class LeaveRequestTile extends ConsumerWidget {
     if (days == 2) return 'يومان';
     if (days <= 10) return '$days أيام';
     return '$days يوماً';
+  }
+
+  /// Pending rows name the current approver and expose the chain position at a
+  /// glance. Legacy single-approver rows have no chain and retain the compact
+  /// one-line layout they had before this field existed.
+  String? _chainProgressLabel(LeaveRequest request) {
+    if (!request.isPending || request.approvals.isEmpty) return null;
+    final currentId = request.currentApproverId ?? request.managerId;
+    LeaveApprovalStep? current;
+    for (final step in request.approvals) {
+      if (step.userId == currentId) {
+        current = step;
+        break;
+      }
+    }
+    if (current == null) return null;
+    final progress =
+        '${request.stepNumberOf(current)} / ${request.approvals.length}';
+    return current.hasName
+        ? 'بانتظار: ${current.userName} · $progress'
+        : 'سلسلة الموافقة: $progress';
   }
 }
 

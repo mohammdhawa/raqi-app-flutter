@@ -32,8 +32,8 @@ class LeaveRepository {
   /// `GET /attendance/leave-balance`
   Future<LeaveBalance> balance() async {
     final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
-      '/attendance/leave-balance',
-    ));
+          '/attendance/leave-balance',
+        ));
     final data = response.data ?? const {};
     final balance = data['balance'];
     return LeaveBalance.fromJson(
@@ -54,9 +54,9 @@ class LeaveRepository {
     LeaveTypeForm form = LeaveTypeForm.requests,
   }) async {
     final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
-      '/attendance/leave-types',
-      queryParameters: {'for': form.apiValue},
-    ));
+          '/attendance/leave-types',
+          queryParameters: {'for': form.apiValue},
+        ));
     return _extractList(response.data)
         .map(LeaveType.fromJson)
         .where((t) => t.id != 0)
@@ -64,10 +64,23 @@ class LeaveRepository {
   }
 
   /// `GET /attendance/leave-managers`
+  ///
+  /// Asks for [maxPerPage] explicitly. This endpoint is paginated and defaults
+  /// to 25 a page (`HandlesListControls::perPage`), ordered `name asc` — and
+  /// the picker it feeds has no search box and no load-more, so whatever is
+  /// not on the first page simply does not exist as far as the form is
+  /// concerned. With 25 managers and the single chief the roster ran to 26
+  /// people and the chief sorted last, which put the one approver who
+  /// habitually closes the chain on page two and out of reach entirely.
+  ///
+  /// 100 is the endpoint's own ceiling, not a safe upper bound on the company:
+  /// past that, the real answer is the `search` parameter this endpoint
+  /// already accepts, not a bigger page.
   Future<List<LeaveManager>> managers() async {
     final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
-      '/attendance/leave-managers',
-    ));
+          '/attendance/leave-managers',
+          queryParameters: {'per_page': maxPerPage},
+        ));
     return _extractList(response.data)
         .map(LeaveManager.fromJson)
         .where((m) => m.id != 0)
@@ -91,20 +104,23 @@ class LeaveRepository {
   Future<LeaveRequest> create({
     required DateTime startDate,
     required DateTime endDate,
-    required int managerId,
+    required List<int> approverIds,
     required int leaveTypeId,
     String? reason,
   }) async {
     final response = await _run(() => _api.dio.post<Map<String, dynamic>>(
-      '/attendance/leave-requests',
-      data: {
-        'start_date': _formatDate(startDate),
-        'end_date': _formatDate(endDate),
-        'manager_id': managerId,
-        'leave_type_id': leaveTypeId,
-        if (reason != null && reason.isNotEmpty) 'reason': reason,
-      },
-    ));
+          '/attendance/leave-requests',
+          data: {
+            'start_date': _formatDate(startDate),
+            'end_date': _formatDate(endDate),
+            // Array order is the decision order. Do not also send the legacy
+            // `manager_id`: this client owns the ordered contract now, and one
+            // source of truth avoids a first-step mismatch validation error.
+            'approver_ids': approverIds,
+            'leave_type_id': leaveTypeId,
+            if (reason != null && reason.isNotEmpty) 'reason': reason,
+          },
+        ));
     return _extractOne(response.data);
   }
 
@@ -127,19 +143,19 @@ class LeaveRepository {
     int page = 1,
   }) async {
     final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
-      '/attendance/leave-requests',
-      queryParameters: {
-        if (status.apiValue != null) 'status': status.apiValue,
-        if (year != null) 'year': year,
-        if (perPage != null) 'per_page': perPage,
-        if (page > 1) 'page': page,
-      },
-    ));
+          '/attendance/leave-requests',
+          queryParameters: {
+            if (status.apiValue != null) 'status': status.apiValue,
+            if (year != null) 'year': year,
+            if (perPage != null) 'per_page': perPage,
+            if (page > 1) 'page': page,
+          },
+        ));
     return _extractPage(response.data);
   }
 
-  /// `GET /attendance/leave-requests/approvals` — requests assigned to the
-  /// authenticated manager for approval.
+  /// `GET /attendance/leave-requests/approvals` — requests where the caller is
+  /// any approver in the chain, including rows whose turn has not arrived.
   Future<List<LeaveRequest>> approvals({
     LeaveStatusFilter status = LeaveStatusFilter.all,
     int? perPage,
@@ -153,13 +169,13 @@ class LeaveRepository {
     int page = 1,
   }) async {
     final response = await _run(() => _api.dio.get<Map<String, dynamic>>(
-      '/attendance/leave-requests/approvals',
-      queryParameters: {
-        if (status.apiValue != null) 'status': status.apiValue,
-        if (perPage != null) 'per_page': perPage,
-        if (page > 1) 'page': page,
-      },
-    ));
+          '/attendance/leave-requests/approvals',
+          queryParameters: {
+            if (status.apiValue != null) 'status': status.apiValue,
+            if (perPage != null) 'per_page': perPage,
+            if (page > 1) 'page': page,
+          },
+        ));
     return _extractPage(response.data);
   }
 
@@ -172,9 +188,9 @@ class LeaveRepository {
     required LeaveStatus status,
   }) async {
     final response = await _run(() => _api.dio.patch<Map<String, dynamic>>(
-      '/attendance/leave-requests/$id/review',
-      data: {'status': status.apiValue},
-    ));
+          '/attendance/leave-requests/$id/review',
+          data: {'status': status.apiValue},
+        ));
     return _extractOne(response.data);
   }
 
@@ -197,7 +213,10 @@ class LeaveRepository {
       if (node is Map && node['data'] is List) node = node['data'];
     }
     if (node is List) {
-      return node.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+      return node
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .toList();
     }
     return const [];
   }
@@ -247,10 +266,8 @@ class LeaveRepository {
   LeaveRequest _extractOne(dynamic data) {
     dynamic node = data;
     if (node is Map) {
-      node = node['leave_request'] ??
-          node['leaveRequest'] ??
-          node['data'] ??
-          node;
+      node =
+          node['leave_request'] ?? node['leaveRequest'] ?? node['data'] ?? node;
     }
     if (node is Map) {
       return LeaveRequest.fromJson(node.cast<String, dynamic>());

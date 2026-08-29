@@ -1,3 +1,5 @@
+import '../../../core/utils/payload_ids.dart';
+
 /// Domain model for a single notification from the backend.
 ///
 /// JSON shape (from `GET /notifications`):
@@ -70,13 +72,7 @@ class AppNotification {
     return DateTime(parsed.year, parsed.month, parsed.day);
   }
 
-  int? _intFromData(String key) {
-    final raw = data[key];
-    if (raw is int) return raw;
-    if (raw is num) return raw.toInt();
-    if (raw is String) return int.tryParse(raw);
-    return null;
-  }
+  int? _intFromData(String key) => payloadId(data[key]);
 
   /// Returns a copy with [readAt] set to now (optimistic local update).
   AppNotification markAsRead() => AppNotification(
@@ -130,12 +126,14 @@ enum NotificationType {
       case 'rejection':
         return NotificationType.rejection;
       // The leave module sends its own event names rather than a bare
-      // `leave`; without these three they fell through to `general` and
+      // `leave`; without these event names they fall through to `general` and
       // rendered with a document icon.
       case 'leave':
       case 'leave_request':
       case 'leave_request_submitted':
+      case 'leave_request_approval_required':
       case 'leave_request_reviewed':
+      case 'leave_request_approval_reassigned':
       case 'leave_excuse_recorded':
         return NotificationType.leave;
       case 'attendance_checkout_reminder':

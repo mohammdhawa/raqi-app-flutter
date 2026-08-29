@@ -118,6 +118,65 @@ void main() {
   });
 
   group('LeaveRequest', () {
+    test('parses the ordered approval chain and viewer-specific fields', () {
+      final request = LeaveRequest.fromJson({
+        'id': 21,
+        'start_date': '2026-09-01',
+        'end_date': '2026-09-03',
+        'status': 'pending',
+        'manager_id': '12',
+        'current_approver_id': '12',
+        'can_review': '1',
+        'approvals': [
+          {
+            'user_id': 7,
+            'approval_order': 1,
+            'status': 'approved',
+            'reviewed_at': '2026-08-29T09:30:00Z',
+            'user': {'id': 7, 'name': 'المدير الأول'},
+          },
+          {
+            'user_id': 12,
+            'approval_order': '2',
+            'status': 'pending',
+            'reviewed_at': null,
+            'user': {'name': 'المدير الثاني'},
+          },
+          {
+            'user_id': 3,
+            'approval_order': 3,
+            // Be tolerant of the uppercase spelling used in some payloads.
+            'status': 'SKIPPED',
+            'user': {'name': 'الرئيس'},
+          },
+        ],
+      });
+
+      expect(request.currentApproverId, 12);
+      expect(request.canReview, isTrue);
+      expect(request.approvals, hasLength(3));
+      expect(request.approvals[0].userName, 'المدير الأول');
+      expect(request.approvals[0].reviewedAt, isNotNull);
+      expect(request.approvals[1].approvalOrder, 2);
+      expect(request.approvals[2].status, LeaveApprovalStatus.skipped);
+      expect(request.approvals[2].status.apiValue, 'skipped');
+      expect(request.approvals[2].status.arabicLabel, 'تم تجاوزها');
+    });
+
+    test('legacy and excuse rows keep absent chain fields nullable', () {
+      final request = LeaveRequest.fromJson({
+        'id': 22,
+        'start_date': '2026-09-01',
+        'end_date': '2026-09-01',
+        'status': 'approved',
+        'is_excuse': true,
+      });
+
+      expect(request.approvals, isEmpty);
+      expect(request.currentApproverId, isNull);
+      expect(request.canReview, isNull);
+    });
+
     test('reads the type, balance snapshot and excuse fields', () {
       final request = LeaveRequest.fromJson({
         'id': 12,
@@ -235,6 +294,54 @@ void main() {
         arabicLeaveRuleMessage('نوع الإجازة (إجازة مرضية) يتطلب ذكر السبب.'),
         isNull,
       );
+    });
+  });
+
+  group('arabicLeaveReviewMessage', () {
+    test('translates the untyped not-your-turn validation', () {
+      expect(
+        arabicLeaveReviewMessage(
+          'It is not your turn to review this leave request.',
+        ),
+        'ليس دورك بعد. الرجاء انتظار المعتمد السابق.',
+      );
+    });
+
+    test('translates every untyped 422 the review endpoint can return', () {
+      // All four carry a bare `message` with no `error` code, so anything this
+      // switch misses is shown to an Arabic-only approver in English.
+      for (final english in const [
+        'Only pending leave requests can be reviewed.',
+        'This leave request has no pending approval step.',
+        'It is not your turn to review this leave request.',
+        'Leave request exceeds the employee remaining annual leave balance.',
+      ]) {
+        final arabic = arabicLeaveReviewMessage(english);
+        expect(arabic, isNotNull, reason: '$english was left untranslated');
+        expect(
+          RegExp(r'[a-zA-Z]').hasMatch(arabic!),
+          isFalse,
+          reason: '$english leaked Latin characters into "$arabic"',
+        );
+      }
+    });
+
+    test('the review balance rule is worded differently from the store one',
+        () {
+      // The store-time sentence says "the remaining", the review-time one says
+      // "the employee remaining". They are separate strings on the backend and
+      // arabicLeaveRuleMessage catches only the first, which is how the
+      // review-time one went untranslated.
+      const reviewTime =
+          'Leave request exceeds the employee remaining annual leave balance.';
+      expect(arabicLeaveRuleMessage(reviewTime), isNull);
+      expect(arabicLeaveReviewMessage(reviewTime), isNotNull);
+    });
+
+    test('leaves unrelated review messages to the generic mapper', () {
+      expect(arabicLeaveReviewMessage(null), isNull);
+      expect(
+          arabicLeaveReviewMessage('The request is already approved.'), isNull);
     });
   });
 }

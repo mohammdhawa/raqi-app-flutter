@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,11 +11,11 @@ import 'core/providers/app_info_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/theme/app_theme.dart';
+import 'core/utils/payload_ids.dart';
 import 'features/attendance/presentation/providers/attendance_controller.dart';
 import 'features/attendance/presentation/providers/attendance_sync_service.dart';
 import 'features/attendance/presentation/providers/leave_providers.dart';
 import 'features/auth/presentation/providers/auth_controller.dart';
-import 'features/splash/splash_screen.dart'; // ← NEW
 
 /// Top-level background handler (must be a top-level function)
 @pragma('vm:entry-point')
@@ -227,24 +226,16 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp>
 
     // A leave_request_id takes precedence so leave notifications open the
     // relevant request.
-    final leaveRequestId = _asId(data['leave_request_id']);
+    final leaveRequestId = PushNotificationService.leaveRequestIdFrom(data);
     if (leaveRequestId != null) {
       router.push('/attendance/leave/requests/$leaveRequestId');
       return;
     }
 
-    final documentId = _asId(data['document_id']);
+    final documentId = payloadId(data['document_id']);
     if (documentId != null) {
       router.push('/documents/$documentId');
     }
-  }
-
-  /// Notification payloads stringify ids; accept int / num / String.
-  int? _asId(dynamic raw) {
-    if (raw == null) return null;
-    if (raw is int) return raw;
-    if (raw is num) return raw.toInt();
-    return int.tryParse(raw.toString());
   }
 
   /// A `Y-m-d` payload date, truncated to the calendar day. `null` when

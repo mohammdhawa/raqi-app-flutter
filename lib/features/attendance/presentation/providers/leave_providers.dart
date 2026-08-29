@@ -77,15 +77,15 @@ final leaveTypeByIdProvider =
   return null;
 });
 
-/// Managers available to approve a leave request — drives the form picker.
+/// Managers and chiefs available to approve a leave request — drives the form
+/// picker without dropping chiefs, who commonly close the ordered chain.
 ///
 /// The authenticated user is removed from the list. `/attendance/leave-managers`
 /// is a company-wide roster, so a manager or the chief finds THEMSELVES in it;
 /// naming yourself as your own approver used to produce a request you could
-/// then approve single-handed. The backend now rejects it outright
-/// (`StoreLeaveRequest` fails `manager_id === user.id`, and the review gate
-/// refuses to approve any such row), so leaving it selectable only offers a
-/// choice that is guaranteed to come back as a 422.
+/// then approve single-handed. The backend now rejects the matching
+/// `approver_ids.N`, so leaving it selectable only offers a choice guaranteed
+/// to come back as a 422.
 final leaveManagersProvider =
     FutureProvider.autoDispose<List<LeaveManager>>((ref) async {
   final currentUserId = ref.watch(currentUserProvider)?.id;
@@ -369,8 +369,8 @@ final leaveRequestDetailProvider =
       ),
     );
   } on ApiFailure catch (failure) {
-    final forbidden = failure.code == ApiErrorCode.forbidden ||
-        failure.statusCode == 403;
+    final forbidden =
+        failure.code == ApiErrorCode.forbidden || failure.statusCode == 403;
     // A plain employee is not an approver — that is the expected answer here
     // and means "not found in this listing", nothing more.
     if (!forbidden) rethrow;

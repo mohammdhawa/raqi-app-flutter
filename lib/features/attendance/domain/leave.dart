@@ -1,8 +1,10 @@
 // Domain models for the attendance Leave Management module
 // (`/api/attendance/leave-*`).
 //
-// Only users with role `manager` can submit leave requests; the selected
-// approving manager approves or rejects them — no chief/executive step.
+// A submitted request carries an ordered chain of managers / chiefs. Exactly
+// one step is current at a time; an approval advances the chain, while a
+// rejection ends the request and marks every later step skipped. The server is
+// authoritative for whose turn it is — the client only mirrors that state.
 //
 // Leave is charged in WORKING days, which the server's calendar currently
 // defines as every day of the week — no day is skipped inside a span. The
@@ -16,6 +18,7 @@
 // snapshotted onto the request when filed and must never be inferred from the
 // type's name.
 
+import '../../../core/errors/api_failure.dart';
 import 'attendance_window.dart' show isWorkingDay;
 
 /// Lifecycle of a leave request, mirroring the `status` field returned by
@@ -37,16 +40,56 @@ enum LeaveStatus {
   }
 
   String get apiValue => switch (this) {
-    LeaveStatus.pending => 'pending',
-    LeaveStatus.approved => 'approved',
-    LeaveStatus.rejected => 'rejected',
-  };
+        LeaveStatus.pending => 'pending',
+        LeaveStatus.approved => 'approved',
+        LeaveStatus.rejected => 'rejected',
+      };
 
   String get arabicLabel => switch (this) {
-    LeaveStatus.pending => 'قيد الانتظار',
-    LeaveStatus.approved => 'معتمدة',
-    LeaveStatus.rejected => 'مرفوضة',
-  };
+        LeaveStatus.pending => 'قيد الانتظار',
+        LeaveStatus.approved => 'معتمدة',
+        LeaveStatus.rejected => 'مرفوضة',
+      };
+}
+
+/// Lifecycle of one approver's step in an ordered leave workflow.
+///
+/// This deliberately is not [LeaveStatus]. A request can only be pending,
+/// approved or rejected; `skipped` belongs to a later step that will never be
+/// asked because an earlier approver rejected the request. Keeping the enums
+/// separate prevents a step-only value from being assigned to the request.
+enum LeaveApprovalStatus {
+  pending,
+  approved,
+  rejected,
+  skipped;
+
+  static LeaveApprovalStatus fromString(String? raw) {
+    switch (raw?.trim().toLowerCase()) {
+      case 'approved':
+        return LeaveApprovalStatus.approved;
+      case 'rejected':
+        return LeaveApprovalStatus.rejected;
+      case 'skipped':
+        return LeaveApprovalStatus.skipped;
+      default:
+        return LeaveApprovalStatus.pending;
+    }
+  }
+
+  String get apiValue => switch (this) {
+        LeaveApprovalStatus.pending => 'pending',
+        LeaveApprovalStatus.approved => 'approved',
+        LeaveApprovalStatus.rejected => 'rejected',
+        LeaveApprovalStatus.skipped => 'skipped',
+      };
+
+  String get arabicLabel => switch (this) {
+        LeaveApprovalStatus.pending => 'قيد الانتظار',
+        LeaveApprovalStatus.approved => 'تمت الموافقة',
+        LeaveApprovalStatus.rejected => 'مرفوضة',
+        LeaveApprovalStatus.skipped => 'تم تجاوزها',
+      };
 }
 
 /// Filter used by the "my requests" / "approvals" lists. [all] sends no
@@ -59,18 +102,18 @@ enum LeaveStatusFilter {
 
   /// The `status=` query value, or null for [all].
   String? get apiValue => switch (this) {
-    LeaveStatusFilter.all => null,
-    LeaveStatusFilter.pending => 'pending',
-    LeaveStatusFilter.approved => 'approved',
-    LeaveStatusFilter.rejected => 'rejected',
-  };
+        LeaveStatusFilter.all => null,
+        LeaveStatusFilter.pending => 'pending',
+        LeaveStatusFilter.approved => 'approved',
+        LeaveStatusFilter.rejected => 'rejected',
+      };
 
   String get arabicLabel => switch (this) {
-    LeaveStatusFilter.all => 'الكل',
-    LeaveStatusFilter.pending => 'قيد الانتظار',
-    LeaveStatusFilter.approved => 'معتمدة',
-    LeaveStatusFilter.rejected => 'مرفوضة',
-  };
+        LeaveStatusFilter.all => 'الكل',
+        LeaveStatusFilter.pending => 'قيد الانتظار',
+        LeaveStatusFilter.approved => 'معتمدة',
+        LeaveStatusFilter.rejected => 'مرفوضة',
+      };
 }
 
 /// Which form a leave type may be offered on. The employee app only ever
@@ -127,22 +170,22 @@ class LeaveType {
   String get label => nameAr.isNotEmpty ? nameAr : (nameEn ?? code);
 
   factory LeaveType.fromJson(Map<String, dynamic> json) => LeaveType(
-    id: _toInt(json['id']) ?? 0,
-    code: (json['code'] as String?) ?? '',
-    nameAr: (json['name_ar'] as String?) ?? '',
-    nameEn: json['name_en'] as String?,
-    deductsBalance: _toBool(json['deducts_balance']) ?? true,
-    requiresReason: _toBool(json['requires_reason']) ?? false,
-  );
+        id: _toInt(json['id']) ?? 0,
+        code: (json['code'] as String?) ?? '',
+        nameAr: (json['name_ar'] as String?) ?? '',
+        nameEn: json['name_en'] as String?,
+        deductsBalance: _toBool(json['deducts_balance']) ?? true,
+        requiresReason: _toBool(json['requires_reason']) ?? false,
+      );
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'code': code,
-    'name_ar': nameAr,
-    'name_en': nameEn,
-    'deducts_balance': deductsBalance,
-    'requires_reason': requiresReason,
-  };
+        'id': id,
+        'code': code,
+        'name_ar': nameAr,
+        'name_en': nameEn,
+        'deducts_balance': deductsBalance,
+        'requires_reason': requiresReason,
+      };
 }
 
 /// The authenticated user's annual leave balance
@@ -184,35 +227,108 @@ class LeaveBalance {
   final int overBalanceDays;
 
   factory LeaveBalance.fromJson(Map<String, dynamic> json) => LeaveBalance(
-    year: _toInt(json['year']) ?? DateTime.now().year,
-    allocatedDays: _toInt(json['allocated_days']) ?? 0,
-    usedDays: _toInt(json['used_days']) ?? 0,
-    remainingDays: _toInt(json['remaining_days']) ?? 0,
-    nonDeductingDays: _toInt(json['non_deducting_days']) ?? 0,
-    overBalanceDays: _toInt(json['over_balance_days']) ?? 0,
-  );
+        year: _toInt(json['year']) ?? DateTime.now().year,
+        allocatedDays: _toInt(json['allocated_days']) ?? 0,
+        usedDays: _toInt(json['used_days']) ?? 0,
+        remainingDays: _toInt(json['remaining_days']) ?? 0,
+        nonDeductingDays: _toInt(json['non_deducting_days']) ?? 0,
+        overBalanceDays: _toInt(json['over_balance_days']) ?? 0,
+      );
 }
 
-/// A manager who can be selected to approve a leave request
-/// (`GET /attendance/leave-managers`). Kept deliberately tolerant of the
-/// exact response shape — only id + name are required to drive the picker.
+/// Stands in for a name the payload did not carry. Kept as one constant
+/// because both [LeaveManager] and [LeaveApprovalStep] produce it and the UI
+/// has to recognise it: comparing against a literal em dash in each screen
+/// makes changing the glyph a silent behaviour change somewhere else. Each of
+/// those classes exposes a `hasName` for exactly that question.
+const String _unnamed = '—';
+
+/// A manager or chief who can be selected to approve a leave request
+/// (`GET /attendance/leave-managers`). Kept deliberately tolerant of the exact
+/// response shape — only id + name are required to drive the picker.
 class LeaveManager {
   const LeaveManager({
     required this.id,
     required this.name,
     this.departmentName,
+    this.sectionName,
   });
 
   final int id;
   final String name;
   final String? departmentName;
 
+  /// The approver's section, when the payload nested one. Shown under the name
+  /// in the picker: a company-wide roster puts several same-named managers in
+  /// one list, and the department alone does not always separate them.
+  final String? sectionName;
+
+  /// False when the payload carried no usable name and [name] is only the
+  /// neutral placeholder. Mirrors [LeaveApprovalStep.hasName]: a picker asks
+  /// this instead of rendering the placeholder as if it were somebody's name,
+  /// or building an avatar initial out of the glyph.
+  bool get hasName => name != _unnamed;
+
   factory LeaveManager.fromJson(Map<String, dynamic> json) {
     final dept = json['department'];
+    final section = json['section'];
     return LeaveManager(
       id: _toInt(json['id']) ?? 0,
-      name: (json['name'] as String?) ?? '—',
+      name: (json['name'] as String?) ?? _unnamed,
       departmentName: dept is Map ? dept['name'] as String? : null,
+      sectionName: section is Map ? section['name'] as String? : null,
+    );
+  }
+}
+
+/// One decision in a leave request's sequential approval chain.
+///
+/// The API normally includes both `user_id` and the nested `user`, but list
+/// projections and older cached payloads may omit either. Parsing therefore
+/// degrades to the nested id / a neutral name instead of discarding the whole
+/// request — the order and status still explain the workflow usefully.
+class LeaveApprovalStep {
+  const LeaveApprovalStep({
+    required this.userId,
+    required this.userName,
+    required this.approvalOrder,
+    required this.status,
+    this.reviewedAt,
+  });
+
+  final int userId;
+  final String userName;
+  final int approvalOrder;
+  final LeaveApprovalStatus status;
+  final DateTime? reviewedAt;
+
+  /// False when the payload carried no usable name and [userName] is only the
+  /// neutral placeholder — so callers can ask about the name instead of
+  /// string-comparing the glyph this class chose to stand in for it.
+  bool get hasName => userName != _unnamed;
+
+  /// True while this step is the one still waiting on its approver. Approved,
+  /// rejected and skipped steps are all finished: nothing further will ever be
+  /// asked of the person named on them.
+  bool get isPending => status == LeaveApprovalStatus.pending;
+
+  factory LeaveApprovalStep.fromJson(Map<String, dynamic> json) {
+    final user = json['user'];
+    final nestedUser = user is Map ? user : null;
+    final nestedName = nestedUser?['name'];
+    final directName = json['user_name'];
+    return LeaveApprovalStep(
+      userId: _toInt(json['user_id']) ??
+          (nestedUser == null ? null : _toInt(nestedUser['id'])) ??
+          0,
+      userName: directName is String && directName.isNotEmpty
+          ? directName
+          : nestedName is String && nestedName.isNotEmpty
+              ? nestedName
+              : _unnamed,
+      approvalOrder: _toInt(json['approval_order']) ?? 0,
+      status: LeaveApprovalStatus.fromString(json['status']?.toString()),
+      reviewedAt: _toDate(json['reviewed_at']),
     );
   }
 }
@@ -232,6 +348,9 @@ class LeaveRequest {
     this.reason,
     this.managerId,
     this.managerName,
+    this.approvals = const [],
+    this.currentApproverId,
+    this.canReview,
     this.requesterId,
     this.requesterName,
     this.createdAt,
@@ -271,9 +390,23 @@ class LeaveRequest {
 
   final String? reason;
 
-  /// The selected approving manager.
+  /// Whoever must act now while pending; after the final decision, whoever
+  /// made it. This remains the compatibility field for single-approver rows.
   final int? managerId;
   final String? managerName;
+
+  /// Ordered decision chain. Empty on legacy single-approver rows and on an HR
+  /// excuse, which is filed already approved and has no review workflow.
+  final List<LeaveApprovalStep> approvals;
+
+  /// The approver whose turn it is, or null after a final decision. Kept apart
+  /// from [managerId], which deliberately rests on the final actor.
+  final int? currentApproverId;
+
+  /// Server-authoritative permission for the viewer. Null means the field was
+  /// absent (older backend / cached row), so the UI may use [managerId] as its
+  /// backward-compatible fallback; false is an explicit denial.
+  final bool? canReview;
 
   /// The employee who submitted the request (useful on the approvals list).
   final int? requesterId;
@@ -293,6 +426,70 @@ class LeaveRequest {
   bool get isPending => status == LeaveStatus.pending;
   bool get isApproved => status == LeaveStatus.approved;
 
+  /// Whether [userId] may act on this request right now.
+  ///
+  /// [canReview] is server-authoritative: `false` is an explicit denial, and
+  /// only null — an older backend, or a cached row parsed before the field
+  /// existed — falls back to the legacy [managerId] equality. The rule lives
+  /// here because the detail screen asks it twice, for the waiting banner and
+  /// for the action bar, and those two must never answer differently.
+  ///
+  /// The fallback additionally refuses a viewer whose own step is already
+  /// closed. [managerId] is the field the server updates lazily, so a cached
+  /// row — or one from a backend that leaves it on the previous approver —
+  /// can still name a viewer who has already approved, or whose step a
+  /// rejection skipped. Their chain step is the reliable answer, and it is
+  /// consulted precisely where the data is least trustworthy: handing them a
+  /// live approve button only to have the server answer 422 is worse than
+  /// showing them none.
+  bool canBeReviewedBy(int? userId) {
+    final explicit = canReview;
+    if (explicit != null) return explicit;
+    if (userId == null || managerId != userId) return false;
+    final step = stepFor(userId);
+    return step == null || step.isPending;
+  }
+
+  /// [approvals] in the order the chain runs.
+  ///
+  /// Sorted by `approval_order`, but **stably**: a list projection can omit
+  /// that field, which [LeaveApprovalStep.fromJson] parses as 0, and every
+  /// step sharing that 0 has to keep the order the payload listed them in
+  /// rather than whatever an unstable sort leaves behind. Without it the tile
+  /// and the detail screen can order the same chain differently.
+  List<LeaveApprovalStep> get orderedApprovals {
+    final indexed = [
+      for (var i = 0; i < approvals.length; i++) (i, approvals[i]),
+    ]..sort((a, b) {
+        final byOrder = a.$2.approvalOrder.compareTo(b.$2.approvalOrder);
+        return byOrder != 0 ? byOrder : a.$1.compareTo(b.$1);
+      });
+    return [for (final entry in indexed) entry.$2];
+  }
+
+  /// The 1-based step number to display for [step].
+  ///
+  /// [LeaveApprovalStep.approvalOrder] is 0 when the payload omitted
+  /// `approval_order` — a tolerated projection, not an error — so the position
+  /// in [orderedApprovals] stands in for it. Every surface that numbers a step
+  /// asks here, or one of them renders «الخطوة 0» for a chain the other
+  /// numbers correctly.
+  int stepNumberOf(LeaveApprovalStep step) => step.approvalOrder > 0
+      ? step.approvalOrder
+      : orderedApprovals.indexOf(step) + 1;
+
+  /// This viewer's own step in the chain, or null when they hold none — a
+  /// plain employee looking at their own request, or a legacy row that has no
+  /// chain at all. The step's status is what separates "your turn has not come
+  /// yet" from "you already acted"; membership alone cannot.
+  LeaveApprovalStep? stepFor(int? userId) {
+    if (userId == null) return null;
+    for (final step in approvals) {
+      if (step.userId == userId) return step;
+    }
+    return null;
+  }
+
   /// Whether this approved request covers [day] (date-only comparison).
   bool coversDate(DateTime day) {
     final d = DateTime(day.year, day.month, day.day);
@@ -304,6 +501,7 @@ class LeaveRequest {
   factory LeaveRequest.fromJson(Map<String, dynamic> json) {
     final manager = json['manager'];
     final user = json['user'];
+    final rawApprovals = json['approvals'];
     return LeaveRequest(
       id: _toInt(json['id']) ?? 0,
       startDate: _toDate(json['start_date']) ?? DateTime.now(),
@@ -320,8 +518,18 @@ class LeaveRequest {
       managerId: _toInt(json['manager_id']) ??
           (manager is Map ? _toInt(manager['id']) : null),
       managerName: manager is Map ? manager['name'] as String? : null,
-      requesterId: _toInt(json['user_id']) ??
-          (user is Map ? _toInt(user['id']) : null),
+      approvals: rawApprovals is List
+          ? rawApprovals
+              .whereType<Map>()
+              .map((step) => LeaveApprovalStep.fromJson(
+                    step.cast<String, dynamic>(),
+                  ))
+              .toList()
+          : const [],
+      currentApproverId: _toInt(json['current_approver_id']),
+      canReview: _toBool(json['can_review']),
+      requesterId:
+          _toInt(json['user_id']) ?? (user is Map ? _toInt(user['id']) : null),
       requesterName: user is Map ? user['name'] as String? : null,
       createdAt: _toDate(json['created_at']),
       reviewedAt: _toDate(json['reviewed_at']),
@@ -382,6 +590,45 @@ String? arabicLeaveRuleMessage(String? serverMessage) {
       'طلب الإجازة يتجاوز رصيد الإجازات السنوية المتبقي.',
     'a pending or approved leave request already overlaps this period.' =>
       'يوجد طلب إجازة معلق أو معتمد يتداخل مع هذه الفترة.',
+    _ => null,
+  };
+}
+
+/// Arabic wording for the four untyped 422s `PATCH /leave-requests/{id}/review`
+/// answers with, or null when [serverMessage] is none of them.
+///
+/// Every one of them carries a bare `message` and no `error` code, so
+/// `ApiErrorCode.fromString` resolves them to `unknown` and the raw English
+/// would otherwise be shown verbatim to an Arabic-only approver. Three of the
+/// four are ordinary races rather than edge cases: an approvals list or a push
+/// notification goes stale the moment another approver acts, an admin
+/// reassigns a step, or the requester's balance is spent between submission
+/// and the final approval.
+///
+/// `not_your_turn` defers to [arabicMessageFor] rather than repeating its
+/// wording, since newer backends send that one as a typed code and the two
+/// spellings must not drift apart. The rest have no code to defer to.
+///
+/// Matching is exact (bar whitespace and case), like [arabicLeaveRuleMessage]:
+/// a partial match risks mistranslating a future rule that merely shares a
+/// prefix, and an unmatched message falls back to the generic Arabic error,
+/// which is vague but never wrong. Note the balance sentence here is NOT the
+/// one [arabicLeaveRuleMessage] catches — the store-time rule says "the
+/// remaining", this one says "the employee remaining" — which is exactly why
+/// it slipped through untranslated.
+String? arabicLeaveReviewMessage(String? serverMessage) {
+  if (serverMessage == null) return null;
+  final normalized =
+      serverMessage.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+  return switch (normalized) {
+    'it is not your turn to review this leave request.' =>
+      arabicMessageFor(ApiErrorCode.notYourTurn),
+    'only pending leave requests can be reviewed.' =>
+      'تم البت في هذا الطلب مسبقاً، ولم يعد قابلاً للمراجعة.',
+    'this leave request has no pending approval step.' =>
+      'لا توجد خطوة موافقة معلقة على هذا الطلب.',
+    'leave request exceeds the employee remaining annual leave balance.' =>
+      'طلب الإجازة يتجاوز رصيد الإجازات السنوية المتبقي للموظف.',
     _ => null,
   };
 }
