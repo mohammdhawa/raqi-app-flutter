@@ -13,8 +13,10 @@ import '../../data/documents_repository.dart';
 import '../../domain/document.dart';
 import '../providers/documents_list_controller.dart';
 import '../../../../core/errors/error_log.dart';
-import '../widgets/approver_picker_sheet.dart';
-import '../widgets/approver_validation.dart';
+import '../../data/users_repository.dart';
+import '../../../../core/validation/approver_validation.dart';
+import '../../../../core/widgets/approver_picker_sheet.dart';
+import '../../../../core/widgets/reorderable_approver_list.dart';
 import '../widgets/attachments_field.dart';
 import 'template_picker_screen.dart';
 
@@ -105,6 +107,21 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
 
   // ── Approver picker ────────────────────────────────────────────────
 
+  /// Who this form may pick, which is not simply "everyone `/managers`
+  /// returns".
+  ///
+  /// The chief is dropped: a document workflow appends them itself as the
+  /// final step, so offering them in the list would build a workflow the
+  /// backend refuses (`chief_already_exists`). This rule belongs to the
+  /// document forms only — the leave form must keep the chief, who commonly
+  /// closes an approval chain — which is why the picker asks for the
+  /// candidates instead of filtering them itself.
+  Future<List<User>> _loadApproverCandidates() async {
+    final all =
+        await ref.read(usersRepositoryProvider).searchPotentialApprovers();
+    return all.where((user) => !user.isChief).toList();
+  }
+
   Future<void> _pickApprovers() async {
     try {
       final result = await showModalBottomSheet<List<User>>(
@@ -117,7 +134,14 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
         builder: (sheetContext) {
           return FractionallySizedBox(
             heightFactor: 0.85,
-            child: ApproverPickerSheet(initialSelection: _approvers),
+            child: ApproverPickerSheet<User>(
+              initialSelection: _approvers,
+              loadCandidates: _loadApproverCandidates,
+              idOf: (user) => user.id,
+              nameOf: (user) => user.name,
+              departmentOf: (user) => user.departmentName,
+              sectionOf: (user) => user.sectionName,
+            ),
           );
         },
       );
@@ -141,7 +165,6 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
 
   void _reorderApprovers(int oldIndex, int newIndex) {
     setState(() {
-      if (newIndex > oldIndex) newIndex -= 1;
       final item = _approvers.removeAt(oldIndex);
       _approvers.insert(newIndex, item);
     });
@@ -200,7 +223,11 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
       if (!mounted) return;
       // An approver was deleted or demoted between loading `/managers` and
       // submitting. Drop the rejected entries and make the user re-pick.
-      final stale = resolveStaleApprovers(failure, _approvers);
+      final stale = resolveStaleApprovers(
+        failure,
+        _approvers,
+        nameOf: (user) => user.name,
+      );
       if (stale != null) {
         setState(() {
           _approvers = stale.remaining;
@@ -1172,10 +1199,9 @@ class _ApproversList extends StatelessWidget {
         if (approvers.isEmpty)
           _buildEmptyState()
         else ...[
-          ReorderableListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            buildDefaultDragHandles: false,
+          ReorderableApproverList(
+            itemCount: approvers.length,
+            itemKey: (index) => ValueKey(approvers[index].id),
             onReorder: onReorder,
             proxyDecorator: (child, index, animation) {
               return Material(
@@ -1185,11 +1211,10 @@ class _ApproversList extends StatelessWidget {
                 child: child,
               );
             },
-            itemCount: approvers.length,
-            itemBuilder: (context, index) {
+            itemBuilder: (context, index, reorder) {
               final user = approvers[index];
-              final isChief = user.isChief;
-              return _buildApproverRow(context, user, index, isChief);
+              return _buildApproverRow(context, user, index, user.isChief,
+                  reorder);
             },
           ),
           const SizedBox(height: 12),
@@ -1245,10 +1270,9 @@ class _ApproversList extends StatelessWidget {
     );
   }
 
-  Widget _buildApproverRow(
-      BuildContext context, User user, int index, bool isChief) {
+  Widget _buildApproverRow(BuildContext context, User user, int index,
+      bool isChief, ApproverReorder reorder) {
     Widget row = Container(
-      key: ValueKey(user.id),
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1271,11 +1295,11 @@ class _ApproversList extends StatelessWidget {
         children: [
           Row(
             children: [
-              // Drag handle (sequential only)
+              // Drag handle (sequential only — a parallel workflow asks
+              // everybody at once, so its list has no order to change).
               if (isSequential) ...[
-                ReorderableDragStartListener(
-                  index: index,
-                  child: const Icon(
+                reorder.handle(
+                  const Icon(
                     Icons.drag_handle,
                     size: 20,
                     color: AppColors.text3,

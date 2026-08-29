@@ -65,6 +65,10 @@ void main() {
     required int requesterId,
     required int managerId,
     LeaveStatus status = LeaveStatus.pending,
+    List<LeaveApprovalStep> approvals = const [],
+    int? currentApproverId,
+    bool? canReview,
+    String managerName = 'المدير',
   }) =>
       LeaveRequest(
         id: id,
@@ -74,7 +78,10 @@ void main() {
         requesterId: requesterId,
         requesterName: 'مقدّم الطلب',
         managerId: managerId,
-        managerName: 'المدير',
+        managerName: managerName,
+        approvals: approvals,
+        currentApproverId: currentApproverId,
+        canReview: canReview,
         days: 2,
       );
 
@@ -82,7 +89,8 @@ void main() {
     test('drops the authenticated user from the approver list', () async {
       // `/attendance/leave-managers` is a company-wide roster, so a manager
       // or the chief finds themselves in it. Naming yourself is refused by
-      // the backend (422 on manager_id), so it must not be offerable.
+      // the backend (422 on the matching approver_ids.N), so it must not be
+      // offerable.
       final container = ProviderContainer(overrides: [
         leaveRepositoryProvider.overrideWithValue(
           _FakeLeaveRepository(managersResult: const [
@@ -197,6 +205,311 @@ void main() {
 
       expect(find.byKey(const Key('leave-approve-button')), findsNothing);
       expect(find.text('رفض'), findsNothing);
+    });
+  });
+
+  group('sequential leave review', () {
+    const steps = [
+      LeaveApprovalStep(
+        userId: 7,
+        userName: 'المدير الأول',
+        approvalOrder: 1,
+        status: LeaveApprovalStatus.pending,
+      ),
+      LeaveApprovalStep(
+        userId: 12,
+        userName: 'المدير الثاني',
+        approvalOrder: 2,
+        status: LeaveApprovalStatus.pending,
+      ),
+      LeaveApprovalStep(
+        userId: 3,
+        userName: 'الرئيس',
+        approvalOrder: 3,
+        status: LeaveApprovalStatus.pending,
+      ),
+    ];
+
+    Future<void> pumpDetail(
+      WidgetTester tester, {
+      required LeaveRequest leaveRequest,
+      required int currentUserId,
+    }) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            leaveRepositoryProvider.overrideWithValue(
+              _FakeLeaveRepository(approvalsResult: [leaveRequest]),
+            ),
+            currentUserProvider.overrideWith(
+              (ref) => User(id: currentUserId, name: 'مراجع'),
+            ),
+          ],
+          child: MaterialApp(
+            home: LeaveRequestDetailScreen(leaveRequestId: leaveRequest.id),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a later approver sees disabled actions and the current name',
+        (tester) async {
+      await pumpDetail(
+        tester,
+        leaveRequest: request(
+          id: 20,
+          requesterId: 2,
+          managerId: 7,
+          managerName: 'المدير الأول',
+          approvals: steps,
+          currentApproverId: 7,
+          canReview: false,
+        ),
+        currentUserId: 12,
+      );
+
+      expect(find.byKey(const Key('leave-waiting-action-bar')), findsOneWidget);
+      expect(
+        find.byKey(const Key('leave-approve-button-disabled')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('بانتظار موافقة المدير الأول'), findsWidgets);
+      expect(find.byKey(const Key('leave-approve-button')), findsNothing);
+    });
+
+    testWidgets('server can_review false overrides a matching manager id',
+        (tester) async {
+      await pumpDetail(
+        tester,
+        leaveRequest: request(
+          id: 21,
+          requesterId: 2,
+          managerId: 7,
+          approvals: steps,
+          currentApproverId: 7,
+          canReview: false,
+        ),
+        currentUserId: 7,
+      );
+
+      expect(find.byKey(const Key('leave-waiting-action-bar')), findsOneWidget);
+      expect(find.byKey(const Key('leave-approve-button')), findsNothing);
+    });
+
+    testWidgets('server can_review true enables the current approver',
+        (tester) async {
+      await pumpDetail(
+        tester,
+        leaveRequest: request(
+          id: 22,
+          requesterId: 2,
+          managerId: 12,
+          managerName: 'المدير الثاني',
+          approvals: const [
+            LeaveApprovalStep(
+              userId: 7,
+              userName: 'المدير الأول',
+              approvalOrder: 1,
+              status: LeaveApprovalStatus.approved,
+            ),
+            LeaveApprovalStep(
+              userId: 12,
+              userName: 'المدير الثاني',
+              approvalOrder: 2,
+              status: LeaveApprovalStatus.pending,
+            ),
+          ],
+          currentApproverId: 12,
+          canReview: true,
+        ),
+        currentUserId: 12,
+      );
+
+      expect(find.byKey(const Key('leave-approve-button')), findsOneWidget);
+      expect(find.byKey(const Key('leave-reject-button')), findsOneWidget);
+      expect(find.byKey(const Key('leave-waiting-action-bar')), findsNothing);
+      expect(find.textContaining('بانتظار موافقة المدير الثاني'), findsNothing);
+    });
+
+    testWidgets('an approver who already acted is not promised a later turn',
+        (tester) async {
+      // The approvals queue hands the request back to EVERY approver on it, so
+      // step 1 keeps reaching this screen while step 2 decides. Their step is
+      // closed: no disabled bar saying the actions arrive "when the request
+      // reaches you", because it never will. The body banner still names who
+      // holds it now.
+      await pumpDetail(
+        tester,
+        leaveRequest: request(
+          id: 25,
+          requesterId: 2,
+          managerId: 12,
+          managerName: 'المدير الثاني',
+          approvals: const [
+            LeaveApprovalStep(
+              userId: 7,
+              userName: 'المدير الأول',
+              approvalOrder: 1,
+              status: LeaveApprovalStatus.approved,
+            ),
+            LeaveApprovalStep(
+              userId: 12,
+              userName: 'المدير الثاني',
+              approvalOrder: 2,
+              status: LeaveApprovalStatus.pending,
+            ),
+          ],
+          currentApproverId: 12,
+          canReview: false,
+        ),
+        currentUserId: 7,
+      );
+
+      expect(find.byKey(const Key('leave-waiting-action-bar')), findsNothing);
+      expect(find.byKey(const Key('leave-approve-button')), findsNothing);
+      expect(find.textContaining('ستتاح الإجراءات'), findsNothing);
+      expect(find.text('بانتظار موافقة المدير الثاني'), findsOneWidget);
+    });
+
+    testWidgets('a skipped approver on a still-pending row gets no action bar',
+        (tester) async {
+      // A reassignment closes the old holder's step while the request stays
+      // pending on somebody else — the same closed-step case, reached without
+      // the viewer ever having made a decision.
+      await pumpDetail(
+        tester,
+        leaveRequest: request(
+          id: 26,
+          requesterId: 2,
+          managerId: 12,
+          managerName: 'المدير الثاني',
+          approvals: const [
+            LeaveApprovalStep(
+              userId: 7,
+              userName: 'المدير الأول',
+              approvalOrder: 1,
+              status: LeaveApprovalStatus.skipped,
+            ),
+            LeaveApprovalStep(
+              userId: 12,
+              userName: 'المدير الثاني',
+              approvalOrder: 2,
+              status: LeaveApprovalStatus.pending,
+            ),
+          ],
+          currentApproverId: 12,
+          canReview: false,
+        ),
+        currentUserId: 7,
+      );
+
+      expect(find.byKey(const Key('leave-waiting-action-bar')), findsNothing);
+      expect(find.textContaining('ستتاح الإجراءات'), findsNothing);
+    });
+
+    testWidgets('the waiting viewer is told who holds the request only once',
+        (tester) async {
+      await pumpDetail(
+        tester,
+        leaveRequest: request(
+          id: 27,
+          requesterId: 2,
+          managerId: 7,
+          managerName: 'المدير الأول',
+          approvals: steps,
+          currentApproverId: 7,
+          canReview: false,
+        ),
+        currentUserId: 12,
+      );
+
+      // The action bar carries the sentence; the body banner stands aside so
+      // the same line does not appear twice on one screen.
+      expect(find.byKey(const Key('leave-waiting-action-bar')), findsOneWidget);
+      expect(
+        find.textContaining('بانتظار موافقة المدير الأول'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the requester still sees who holds their pending request',
+        (tester) async {
+      await pumpDetail(
+        tester,
+        leaveRequest: request(
+          id: 28,
+          requesterId: 2,
+          managerId: 7,
+          managerName: 'المدير الأول',
+          approvals: steps,
+          currentApproverId: 7,
+          canReview: false,
+        ),
+        currentUserId: 2,
+      );
+
+      expect(find.text('بانتظار موافقة المدير الأول'), findsOneWidget);
+      expect(find.byKey(const Key('leave-waiting-action-bar')), findsNothing);
+    });
+
+    testWidgets('a rejected chain renders later steps as skipped',
+        (tester) async {
+      await pumpDetail(
+        tester,
+        leaveRequest: request(
+          id: 23,
+          requesterId: 2,
+          managerId: 12,
+          status: LeaveStatus.rejected,
+          approvals: const [
+            LeaveApprovalStep(
+              userId: 7,
+              userName: 'المدير الأول',
+              approvalOrder: 1,
+              status: LeaveApprovalStatus.approved,
+            ),
+            LeaveApprovalStep(
+              userId: 12,
+              userName: 'المدير الثاني',
+              approvalOrder: 2,
+              status: LeaveApprovalStatus.rejected,
+            ),
+            LeaveApprovalStep(
+              userId: 3,
+              userName: 'الرئيس',
+              approvalOrder: 3,
+              status: LeaveApprovalStatus.skipped,
+            ),
+          ],
+          canReview: false,
+        ),
+        currentUserId: 3,
+      );
+
+      expect(find.text('تم تجاوزها'), findsOneWidget);
+      expect(find.byKey(const Key('leave-waiting-action-bar')), findsNothing);
+      expect(find.byKey(const Key('leave-approve-button')), findsNothing);
+    });
+
+    testWidgets('an HR excuse still has no approval workflow', (tester) async {
+      await pumpDetail(
+        tester,
+        leaveRequest: LeaveRequest(
+          id: 24,
+          startDate: DateTime(2026, 8, 20),
+          endDate: DateTime(2026, 8, 20),
+          status: LeaveStatus.approved,
+          isExcuse: true,
+          days: 1,
+        ),
+        currentUserId: 7,
+      );
+
+      expect(find.text('عذر مسجّل من الموارد البشرية'), findsOneWidget);
+      expect(find.text('سلسلة الموافقة'), findsNothing);
+      expect(find.byKey(const Key('leave-waiting-action-bar')), findsNothing);
+      expect(find.byKey(const Key('leave-approve-button')), findsNothing);
     });
   });
 }

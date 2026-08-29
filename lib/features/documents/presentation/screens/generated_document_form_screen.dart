@@ -12,8 +12,10 @@ import '../../data/documents_repository.dart';
 import '../../domain/document.dart';
 import '../../domain/document_template.dart';
 import '../providers/documents_list_controller.dart';
-import '../widgets/approver_picker_sheet.dart';
-import '../widgets/approver_validation.dart';
+import '../../data/users_repository.dart';
+import '../../../../core/validation/approver_validation.dart';
+import '../../../../core/widgets/approver_picker_sheet.dart';
+import '../../../../core/widgets/reorderable_approver_list.dart';
 import '../widgets/attachments_field.dart';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -236,6 +238,16 @@ class _GeneratedDocumentFormScreenState
 
   // ── Approver picker ────────────────────────────────────────────────
 
+  /// Who this form may pick. The chief is dropped for the same reason as on
+  /// the upload form: the generated-document workflow appends them itself, so
+  /// listing them would offer a step the backend rejects. Deliberately not a
+  /// rule inside the shared picker — the leave form needs the chief.
+  Future<List<User>> _loadApproverCandidates() async {
+    final all =
+        await ref.read(usersRepositoryProvider).searchPotentialApprovers();
+    return all.where((user) => !user.isChief).toList();
+  }
+
   Future<void> _pickApprovers() async {
     try {
       final result = await showModalBottomSheet<List<User>>(
@@ -248,7 +260,14 @@ class _GeneratedDocumentFormScreenState
         builder: (sheetContext) {
           return FractionallySizedBox(
             heightFactor: 0.85,
-            child: ApproverPickerSheet(initialSelection: _approvers),
+            child: ApproverPickerSheet<User>(
+              initialSelection: _approvers,
+              loadCandidates: _loadApproverCandidates,
+              idOf: (user) => user.id,
+              nameOf: (user) => user.name,
+              departmentOf: (user) => user.departmentName,
+              sectionOf: (user) => user.sectionName,
+            ),
           );
         },
       );
@@ -273,7 +292,6 @@ class _GeneratedDocumentFormScreenState
 
   void _reorderApprovers(int oldIndex, int newIndex) {
     setState(() {
-      if (newIndex > oldIndex) newIndex -= 1;
       final item = _approvers.removeAt(oldIndex);
       _approvers.insert(newIndex, item);
     });
@@ -395,7 +413,11 @@ class _GeneratedDocumentFormScreenState
 
       // An approver was deleted or demoted between loading `/managers` and
       // submitting. Drop the rejected entries and make the user re-pick.
-      final stale = resolveStaleApprovers(failure, _approvers);
+      final stale = resolveStaleApprovers(
+        failure,
+        _approvers,
+        nameOf: (user) => user.name,
+      );
       if (stale != null) {
         if (!mounted) return;
         setState(() {
@@ -653,17 +675,15 @@ class _GeneratedDocumentFormScreenState
 
                   // Approver list
                   if (_approvers.isNotEmpty) ...[
-                    ReorderableListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
+                    ReorderableApproverList(
                       itemCount: _approvers.length,
+                      itemKey: (index) => ValueKey(_approvers[index].id),
                       onReorder: _reorderApprovers,
                       proxyDecorator: (child, _, __) =>
                           Material(color: Colors.transparent, child: child),
-                      itemBuilder: (context, index) {
+                      itemBuilder: (context, index, reorder) {
                         final user = _approvers[index];
                         return ListTile(
-                          key: ValueKey(user.id),
                           dense: true,
                           contentPadding:
                               const EdgeInsets.symmetric(horizontal: 4),
@@ -705,8 +725,10 @@ class _GeneratedDocumentFormScreenState
                                 ),
                               ),
                               const SizedBox(width: 4),
-                              const Icon(Icons.drag_handle,
-                                  size: 18, color: AppColors.text3),
+                              reorder.handle(
+                                const Icon(Icons.drag_handle,
+                                    size: 18, color: AppColors.text3),
+                              ),
                             ],
                           ),
                         );

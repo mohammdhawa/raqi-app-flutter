@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../network/api_client.dart';
+import '../utils/payload_ids.dart';
 
 /// Handles FCM setup, token registration, and incoming notification display.
 class PushNotificationService {
@@ -58,6 +59,16 @@ class PushNotificationService {
   final _notificationTapController =
       StreamController<Map<String, dynamic>>.broadcast();
 
+  /// Extracts the route key shared by every leave push.
+  ///
+  /// In particular, `leave_request_approval_required` and
+  /// `leave_request_approval_reassigned` add step metadata but retain the same
+  /// `leave_request_id` contract as submitted/reviewed notifications. Routing
+  /// by that stable key — not by an exhaustive type switch — also keeps future
+  /// leave events deep-link compatible without another client release.
+  static int? leaveRequestIdFrom(Map<String, dynamic> data) =>
+      payloadId(data['leave_request_id']);
+
   /// Emits the notification's `data` map whenever the user taps a foreground
   /// notification banner — so callers can route on `document_id`,
   /// `leave_request_id`, etc.
@@ -70,7 +81,8 @@ class PushNotificationService {
     await FirebaseMessaging.instance.requestPermission();
 
     // Setup local notifications for foreground banners
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings();
     await _localNotifications.initialize(
       const InitializationSettings(android: androidSettings, iOS: iosSettings),
@@ -84,7 +96,8 @@ class PushNotificationService {
       importance: Importance.high,
     );
     await _localNotifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
   }
 
@@ -248,6 +261,7 @@ class PushNotificationService {
   }
 }
 
-final pushNotificationServiceProvider = Provider<PushNotificationService>((ref) {
+final pushNotificationServiceProvider =
+    Provider<PushNotificationService>((ref) {
   return PushNotificationService(ref.watch(apiClientProvider));
 });

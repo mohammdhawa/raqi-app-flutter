@@ -8,7 +8,7 @@ import 'package:doc_approval/features/documents/data/users_repository.dart';
 import 'package:doc_approval/features/documents/domain/document.dart';
 import 'package:doc_approval/features/documents/domain/document_template.dart';
 import 'package:doc_approval/features/documents/presentation/screens/generated_document_form_screen.dart';
-import 'package:doc_approval/features/documents/presentation/widgets/approver_validation.dart';
+import 'package:doc_approval/core/validation/approver_validation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -270,6 +270,7 @@ void main() {
           ],
         }),
         selection,
+        nameOf: (user) => user.name,
       );
 
       expect(outcome, isNotNull);
@@ -287,6 +288,7 @@ void main() {
           'approver_ids.2': ['غير صالح'],
         }),
         selection,
+        nameOf: (user) => user.name,
       );
 
       expect(outcome!.remaining.map((u) => u.id), [3]);
@@ -299,6 +301,7 @@ void main() {
           'title': ['مطلوب'],
         }),
         selection,
+        nameOf: (user) => user.name,
       );
 
       expect(outcome, isNull);
@@ -310,6 +313,7 @@ void main() {
           'approver_ids': ['مطلوب'],
         }),
         selection,
+        nameOf: (user) => user.name,
       );
 
       expect(outcome!.remaining, hasLength(3));
