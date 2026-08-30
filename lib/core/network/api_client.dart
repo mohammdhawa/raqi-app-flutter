@@ -35,7 +35,7 @@ class ApiClient {
           // Remove 'Content-Type': 'application/json'
           // Dio sets it automatically — multipart needs its own boundary
         },
-        validateStatus: (s) => s != null && s <= 500,
+        validateStatus: (s) => s != null && s <= 599,
       ),
     );
 
@@ -55,7 +55,7 @@ class ApiClient {
             handler.next(response);
             return;
           }
-          // 4xx — convert to a typed failure and reject.
+          // Non-2xx — convert to a typed failure and reject.
           final failure = _failureFromResponse(response);
           if (failure.code == ApiErrorCode.unauthenticated) {
             await _tokenStorage.clear();

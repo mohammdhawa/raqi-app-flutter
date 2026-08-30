@@ -41,14 +41,14 @@ class AuthRepository {
     required String password,
   }) async {
     final response = await _run(() => _api.dio.post<Map<String, dynamic>>(
-      '/login',
-      data: {
-        'email': email,
-        'password': password,
-        'platform': 'mobile',
-        'device_name': 'Flutter ${Platform.operatingSystem}',
-      },
-    ));
+          '/login',
+          data: {
+            'email': email,
+            'password': password,
+            'platform': 'mobile',
+            'device_name': 'Flutter ${Platform.operatingSystem}',
+          },
+        ));
     final data = response.data!;
     final token = data['token'] as String;
     final user = User.fromJson(data['user'] as Map<String, dynamic>);
@@ -91,11 +91,49 @@ class AuthRepository {
       await _storage.clear();
       return null;
     }
+    late final User cachedUser;
     try {
-      return User.fromJson(jsonDecode(userJson) as Map<String, dynamic>);
+      cachedUser = User.fromJson(
+        jsonDecode(userJson) as Map<String, dynamic>,
+      );
     } catch (_) {
       await _storage.clear();
       return null;
+    }
+
+    try {
+      // The server is authoritative for role and boolean capabilities. Do not
+      // render a role-dependent screen from the cached profile first: a user
+      // may have been transferred or demoted while the app was closed.
+      final response = await _run(
+        () => _api.dio.get<Map<String, dynamic>>('/me'),
+      );
+      final freshUser = User.fromJson(response.data!);
+
+      await _storage.writeSession(
+        token: token,
+        userJson: jsonEncode(freshUser.toJson()),
+      );
+
+      return freshUser;
+    } on ApiFailure catch (failure) {
+      if (failure.code == ApiErrorCode.unauthenticated ||
+          failure.statusCode == 401) {
+        await _storage.clear();
+        return null;
+      }
+
+      final status = failure.statusCode;
+      final isServerFailure = status != null && status >= 500 && status <= 599;
+      if (failure.code == ApiErrorCode.network || isServerFailure) {
+        // Offline attendance capture is intentionally local-first. A temporary
+        // server outage is equivalent at bootstrap: the token was not
+        // rejected, so preserve the cached session while marking every cached
+        // capability as stale until a later launch can refresh it.
+        return cachedUser.copyWith(sessionStale: true);
+      }
+
+      rethrow;
     }
   }
 }
