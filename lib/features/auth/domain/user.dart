@@ -12,6 +12,7 @@ class User {
     this.sectionName,
     this.attendanceCheck = false,
     this.canViewAttendance = false,
+    this.sessionStale = false,
   });
 
   final int id;
@@ -31,6 +32,11 @@ class User {
   /// Gates access to `GET /attendance/records` and the history screen.
   final bool canViewAttendance;
 
+  /// True only when startup could not refresh this cached profile from `/me`.
+  /// The cached token remains usable for the offline attendance queue, but
+  /// role-dependent UI must make the stale state visible to the user.
+  final bool sessionStale;
+
   bool get isAdmin => role == 'admin';
   bool get isChief => role == 'chief';
   bool get isEmployee => role == 'employee';
@@ -39,12 +45,15 @@ class User {
   /// Anyone may *submit* a request — that gate was removed on the backend.
   bool get isManager => role == 'manager';
 
+  /// The legacy document workflow is available only to a known document role.
+  /// Null or unrecognised roles deliberately get no document affordances.
+  bool get canUseDocumentWorkflow => isAdmin || isManager || isChief;
+
   factory User.empty() => const User(
-    id: 0,
-    name: '',
-    email: '',
-    role: 'manager',
-  );
+        id: 0,
+        name: '',
+        email: '',
+      );
 
   factory User.fromJson(Map<String, dynamic> json) {
     final dept = json['department'] as Map<String, dynamic>?;
@@ -53,7 +62,7 @@ class User {
       id: json['id'] as int,
       name: json['name'] as String,
       email: json['email'] as String?,
-      role: (json['role'] as String?) ?? 'manager',
+      role: json['role'] as String?,
       departmentId: json['department_id'] as int?,
       sectionId: json['section_id'] as int?,
       departmentName: dept?['name'] as String?,
@@ -64,15 +73,29 @@ class User {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'email': email,
-    'role': role,
-    'department_id': departmentId,
-    'section_id': sectionId,
-    if (departmentName != null) 'department': {'name': departmentName},
-    if (sectionName != null) 'section': {'name': sectionName},
-    'attendance_check': attendanceCheck,
-    'can_view_attendance': canViewAttendance,
-  };
+        'id': id,
+        'name': name,
+        'email': email,
+        'role': role,
+        'department_id': departmentId,
+        'section_id': sectionId,
+        if (departmentName != null) 'department': {'name': departmentName},
+        if (sectionName != null) 'section': {'name': sectionName},
+        'attendance_check': attendanceCheck,
+        'can_view_attendance': canViewAttendance,
+      };
+
+  User copyWith({bool? sessionStale}) => User(
+        id: id,
+        name: name,
+        email: email,
+        role: role,
+        departmentId: departmentId,
+        sectionId: sectionId,
+        departmentName: departmentName,
+        sectionName: sectionName,
+        attendanceCheck: attendanceCheck,
+        canViewAttendance: canViewAttendance,
+        sessionStale: sessionStale ?? this.sessionStale,
+      );
 }

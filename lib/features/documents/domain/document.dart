@@ -6,10 +6,10 @@ enum DocumentStatus {
   rejected;
 
   static DocumentStatus fromString(String? raw) => switch (raw) {
-    'approved' => DocumentStatus.approved,
-    'rejected' => DocumentStatus.rejected,
-    _ => DocumentStatus.pending,
-  };
+        'approved' => DocumentStatus.approved,
+        'rejected' => DocumentStatus.rejected,
+        _ => DocumentStatus.pending,
+      };
 }
 
 enum WorkflowMode {
@@ -28,10 +28,10 @@ enum WorkflowStepStatus {
   rejected;
 
   static WorkflowStepStatus fromString(String? raw) => switch (raw) {
-    'approved' => WorkflowStepStatus.approved,
-    'rejected' => WorkflowStepStatus.rejected,
-    _ => WorkflowStepStatus.pending,
-  };
+        'approved' => WorkflowStepStatus.approved,
+        'rejected' => WorkflowStepStatus.rejected,
+        _ => WorkflowStepStatus.pending,
+      };
 }
 
 enum LogAction {
@@ -42,12 +42,12 @@ enum LogAction {
   unknown;
 
   static LogAction fromString(String? raw) => switch (raw) {
-    'created' => LogAction.created,
-    'sent' => LogAction.sent,
-    'approved' => LogAction.approved,
-    'rejected' => LogAction.rejected,
-    _ => LogAction.unknown,
-  };
+        'created' => LogAction.created,
+        'sent' => LogAction.sent,
+        'approved' => LogAction.approved,
+        'rejected' => LogAction.rejected,
+        _ => LogAction.unknown,
+      };
 }
 
 /// A single approver step in a document's workflow.
@@ -67,26 +67,28 @@ class WorkflowStep {
   final int userId;
   final int order;
   final WorkflowStepStatus status;
-  /// `"manager"` or `"chief"` — determines UI treatment of this step.
-  final String role;
+
+  /// `"manager"` or `"chief"` — null means no role-derived capability.
+  final String? role;
   final User user;
   final DateTime? signedAt;
   final String? note;
 
   bool get isChief => role == 'chief';
+  bool get isManager => role == 'manager';
 
   factory WorkflowStep.fromJson(Map<String, dynamic> json) => WorkflowStep(
-    id: json['id'] as int,
-    userId: json['user_id'] as int,
-    order: (json['order'] as num?)?.toInt() ?? 0,
-    status: WorkflowStepStatus.fromString(json['status'] as String?),
-    role: (json['role'] as String?) ?? 'manager',
-    user: json['user'] != null
-        ? User.fromJson(json['user'] as Map<String, dynamic>)
-        : User.empty(),
-    signedAt: _parseDate(json['signed_at']),
-    note: json['note'] as String?,
-  );
+        id: json['id'] as int,
+        userId: json['user_id'] as int,
+        order: (json['order'] as num?)?.toInt() ?? 0,
+        status: WorkflowStepStatus.fromString(json['status'] as String?),
+        role: json['role'] as String?,
+        user: json['user'] != null
+            ? User.fromJson(json['user'] as Map<String, dynamic>)
+            : User.empty(),
+        signedAt: _parseDate(json['signed_at']),
+        note: json['note'] as String?,
+      );
 }
 
 /// A single audit log entry.
@@ -108,13 +110,13 @@ class DocumentLog {
   final String? note;
 
   factory DocumentLog.fromJson(Map<String, dynamic> json) => DocumentLog(
-    id: json['id'] as int,
-    action: LogAction.fromString(json['action'] as String?),
-    doneBy: json['done_by'] as int,
-    createdAt: _parseDate(json['created_at']) ?? DateTime.now(),
-    user: User.fromJson(json['user'] as Map<String, dynamic>),
-    note: json['note'] as String?,
-  );
+        id: json['id'] as int,
+        action: LogAction.fromString(json['action'] as String?),
+        doneBy: json['done_by'] as int,
+        createdAt: _parseDate(json['created_at']) ?? DateTime.now(),
+        user: User.fromJson(json['user'] as Map<String, dynamic>),
+        note: json['note'] as String?,
+      );
 }
 
 /// A file attached to a document alongside the main file. Returned in the
@@ -205,6 +207,7 @@ class Document {
   final String? fileName;
   final String? fileMime;
   final int? fileSize;
+
   /// Populated incrementally after each approve/reject action.
   /// Non-null even while status is still `pending`.
   final String? stampedFilePath;
@@ -358,30 +361,31 @@ class Document {
 
   Document copyWith({
     List<User>? nextPendingUsers,
-  }) => Document(
-    id: id,
-    title: title,
-    description: description,
-    filePath: filePath,
-    fileName: fileName,
-    fileMime: fileMime,
-    fileSize: fileSize,
-    stampedFilePath: stampedFilePath,
-    status: status,
-    workflowMode: workflowMode,
-    createdAt: createdAt,
-    origin: origin,
-    templateName: templateName,
-    documentNumber: documentNumber,
-    sectionId: sectionId,
-    exportNumber: exportNumber,
-    importNumber: importNumber,
-    attachments: attachments,
-    creator: creator,
-    workflows: workflows,
-    logs: logs,
-    nextPendingUsers: nextPendingUsers ?? this.nextPendingUsers,
-  );
+  }) =>
+      Document(
+        id: id,
+        title: title,
+        description: description,
+        filePath: filePath,
+        fileName: fileName,
+        fileMime: fileMime,
+        fileSize: fileSize,
+        stampedFilePath: stampedFilePath,
+        status: status,
+        workflowMode: workflowMode,
+        createdAt: createdAt,
+        origin: origin,
+        templateName: templateName,
+        documentNumber: documentNumber,
+        sectionId: sectionId,
+        exportNumber: exportNumber,
+        importNumber: importNumber,
+        attachments: attachments,
+        creator: creator,
+        workflows: workflows,
+        logs: logs,
+        nextPendingUsers: nextPendingUsers ?? this.nextPendingUsers,
+      );
 }
 
 /// A page of documents with pagination metadata.

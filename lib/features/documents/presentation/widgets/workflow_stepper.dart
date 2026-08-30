@@ -58,9 +58,6 @@ class _StepRow extends StatelessWidget {
       step.status == WorkflowStepStatus.approved ||
       step.status == WorkflowStepStatus.rejected;
 
-  bool get _isActive =>
-      step.status == WorkflowStepStatus.pending && !step.isChief;
-
   @override
   Widget build(BuildContext context) {
     final content = _buildContent(context);
@@ -198,7 +195,7 @@ class _StepRow extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.surface,
               borderRadius: BorderRadius.circular(8),
-              border: Border(
+              border: const Border(
                 right: BorderSide(
                   color: AppColors.accent,
                   width: 2,
@@ -328,20 +325,20 @@ class _StatusLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, bgColor, fgColor) = switch (status) {
       WorkflowStepStatus.approved => (
-        'اعتمد',
-        AppColors.approvedBg,
-        AppColors.approved,
-      ),
+          'اعتمد',
+          AppColors.approvedBg,
+          AppColors.approved,
+        ),
       WorkflowStepStatus.rejected => (
-        'رفض',
-        AppColors.rejectedBg,
-        AppColors.rejected,
-      ),
+          'رفض',
+          AppColors.rejectedBg,
+          AppColors.rejected,
+        ),
       _ => (
-        'بانتظار',
-        AppColors.pendingBg,
-        AppColors.pendingText,
-      ),
+          'بانتظار',
+          AppColors.pendingBg,
+          AppColors.pendingText,
+        ),
     };
 
     return Container(

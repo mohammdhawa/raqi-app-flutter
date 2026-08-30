@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
+import '../../../auth/presentation/widgets/session_staleness_notice.dart';
 import '../../data/documents_repository.dart';
 import '../providers/documents_list_controller.dart';
 import '../widgets/document_list_item.dart';
@@ -17,25 +18,25 @@ const _kStatusFilters = DocumentStatusFilter.values;
 /// Visual metadata (icon + accent color) for each status filter chip.
 extension _StatusFilterStyle on DocumentStatusFilter {
   IconData get icon => switch (this) {
-    DocumentStatusFilter.all => Icons.apps_rounded,
-    DocumentStatusFilter.pending => Icons.schedule_rounded,
-    DocumentStatusFilter.approved => Icons.check_circle_rounded,
-    DocumentStatusFilter.rejected => Icons.cancel_rounded,
-  };
+        DocumentStatusFilter.all => Icons.apps_rounded,
+        DocumentStatusFilter.pending => Icons.schedule_rounded,
+        DocumentStatusFilter.approved => Icons.check_circle_rounded,
+        DocumentStatusFilter.rejected => Icons.cancel_rounded,
+      };
 
   Color get accent => switch (this) {
-    DocumentStatusFilter.all => AppColors.primary,
-    DocumentStatusFilter.pending => AppColors.pending,
-    DocumentStatusFilter.approved => AppColors.approved,
-    DocumentStatusFilter.rejected => AppColors.rejected,
-  };
+        DocumentStatusFilter.all => AppColors.primary,
+        DocumentStatusFilter.pending => AppColors.pending,
+        DocumentStatusFilter.approved => AppColors.approved,
+        DocumentStatusFilter.rejected => AppColors.rejected,
+      };
 
   Color get accentBg => switch (this) {
-    DocumentStatusFilter.all => AppColors.surface2,
-    DocumentStatusFilter.pending => AppColors.pendingBg,
-    DocumentStatusFilter.approved => AppColors.approvedBg,
-    DocumentStatusFilter.rejected => AppColors.rejectedBg,
-  };
+        DocumentStatusFilter.all => AppColors.surface2,
+        DocumentStatusFilter.pending => AppColors.pendingBg,
+        DocumentStatusFilter.approved => AppColors.approvedBg,
+        DocumentStatusFilter.rejected => AppColors.rejectedBg,
+      };
 }
 
 class DocumentsHomeScreen extends ConsumerStatefulWidget {
@@ -94,10 +95,8 @@ class _DocumentsHomeScreenState extends ConsumerState<DocumentsHomeScreen>
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
-    final inboxState =
-        ref.watch(documentsListProvider(DocumentListType.inbox));
-    final sentState =
-        ref.watch(documentsListProvider(DocumentListType.sent));
+    final inboxState = ref.watch(documentsListProvider(DocumentListType.inbox));
+    final sentState = ref.watch(documentsListProvider(DocumentListType.sent));
     final topPadding = MediaQuery.of(context).padding.top;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -115,6 +114,8 @@ class _DocumentsHomeScreenState extends ConsumerState<DocumentsHomeScreen>
               sentCount: sentState.documents.length,
               onLogout: _confirmAndLogout,
             ),
+
+            const SessionStalenessNotice(),
 
             // ── Tab Content ──────────────────────────────────────────
             Expanded(
@@ -240,7 +241,7 @@ class _AppBarSection extends StatelessWidget {
                           ),
                           if (user != null)
                             Text(
-                              '${user.name} · ${user.role}',
+                              '${user.name} · ${user.role ?? 'صلاحيات محدودة'}',
                               style: const TextStyle(
                                 fontSize: 11,
                                 color: AppColors.textOnDark2,
@@ -340,13 +341,13 @@ class _BadgeTabBar extends StatelessWidget {
       unselectedLabelColor: Colors.white.withValues(alpha: 0.65),
       indicatorSize: TabBarIndicatorSize.tab,
       dividerColor: Colors.transparent,
-      indicator: UnderlineTabIndicator(
-        borderSide: const BorderSide(width: 3, color: AppColors.accent),
-        borderRadius: const BorderRadius.only(
+      indicator: const UnderlineTabIndicator(
+        borderSide: BorderSide(width: 3, color: AppColors.accent),
+        borderRadius: BorderRadius.only(
           topLeft: Radius.circular(3),
           topRight: Radius.circular(3),
         ),
-        insets: const EdgeInsets.symmetric(horizontal: 6),
+        insets: EdgeInsets.symmetric(horizontal: 6),
       ),
       tabs: List.generate(tabs.length, (i) {
         final data = tabs[i];
@@ -555,15 +556,12 @@ class _StatusFilterBar extends StatelessWidget {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeOut,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: isSelected ? accent : filter.accentBg,
                 borderRadius: BorderRadius.circular(AppColors.rMd),
                 border: Border.all(
-                  color: isSelected
-                      ? accent
-                      : accent.withValues(alpha: 0.20),
+                  color: isSelected ? accent : accent.withValues(alpha: 0.20),
                   width: 1,
                 ),
                 boxShadow: isSelected

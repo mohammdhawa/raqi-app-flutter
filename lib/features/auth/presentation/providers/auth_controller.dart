@@ -9,7 +9,6 @@ import '../../domain/user.dart';
 import '../../../../core/services/push_notification_service.dart';
 import '../../../../core/services/session_cleanup.dart';
 
-
 /// Three possible auth states.
 sealed class AuthState {
   const AuthState();
@@ -54,7 +53,11 @@ class AuthController extends StateNotifier<AuthState> {
   /// so, and cached pages quietly outlive the token that fetched them.
   final SessionCleanup _sessionCleanup;
 
-  static const _bootstrapTimeout = Duration(seconds: 10);
+  // `/me` is now part of restoreSession(). Keep the deadlock guard above the
+  // API client's connect/receive limits so a normal offline timeout can return
+  // the cached user with sessionStale=true instead of being mistaken for a
+  // missing session here.
+  static const _bootstrapTimeout = Duration(seconds: 60);
 
   /// Resolves the stored session on start-up.
   ///
@@ -155,13 +158,13 @@ class AuthController extends StateNotifier<AuthState> {
 
 final authControllerProvider =
     StateNotifierProvider<AuthController, AuthState>((ref) {
-      return AuthController(
-        ref.watch(authRepositoryProvider),
-        ref.watch(unauthenticatedSignalProvider),
-        ref.watch(pushNotificationServiceProvider),
-        ref.watch(sessionCleanupProvider),
-      );
-    });
+  return AuthController(
+    ref.watch(authRepositoryProvider),
+    ref.watch(unauthenticatedSignalProvider),
+    ref.watch(pushNotificationServiceProvider),
+    ref.watch(sessionCleanupProvider),
+  );
+});
 
 /// Convenience accessor for the current user (null if not signed in).
 final currentUserProvider = Provider<User?>((ref) {

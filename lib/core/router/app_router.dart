@@ -8,6 +8,7 @@ import '../../features/attendance/presentation/screens/attendance_screen.dart';
 import '../../features/attendance/presentation/screens/leave_request_detail_screen.dart';
 import '../../features/attendance/presentation/screens/leave_request_form_screen.dart';
 import '../../features/attendance/presentation/screens/leave_screen.dart';
+import '../../features/auth/domain/user.dart';
 import '../../features/auth/presentation/providers/auth_controller.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/documents/presentation/screens/create_document_screen.dart';
@@ -40,6 +41,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isAuthenticated = authState is AuthAuthenticated;
       if (!isAuthenticated && !loggingIn) return '/login';
       if (isAuthenticated && loggingIn) return '/';
+
+      // A missing/unknown role is a no-capabilities state, never an implicit
+      // manager. Keep document routes out of reach until `/me` returns a known
+      // document-workflow role; the backend remains the final authorization.
+      final onDocumentRoute = state.matchedLocation.startsWith('/documents');
+      if (authState is AuthAuthenticated &&
+          onDocumentRoute &&
+          !authState.user.canUseDocumentWorkflow) {
+        return '/';
+      }
       return null;
     },
     routes: [
@@ -106,8 +117,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 // still the right screen.
                 builder: (context, state) {
                   final raw = state.uri.queryParameters['date'];
-                  final parsed =
-                      raw == null ? null : DateTime.tryParse(raw);
+                  final parsed = raw == null ? null : DateTime.tryParse(raw);
                   return AttendanceHistoryScreen(
                     initialDate: parsed == null
                         ? null
@@ -133,8 +143,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'requests/:id',
                     builder: (context, state) {
-                      final id =
-                          int.tryParse(state.pathParameters['id'] ?? '');
+                      final id = int.tryParse(state.pathParameters['id'] ?? '');
                       if (id == null) return const _NotFoundScreen();
                       return LeaveRequestDetailScreen(leaveRequestId: id);
                     },
@@ -150,20 +159,25 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-/// Picks the landing screen by role: employees (`attendance_check`-only
-/// accounts, no document workflows) land directly on the check-in/out
-/// screen; everyone else gets the regular documents home.
+/// Picks the landing screen from positive role capabilities. A missing or
+/// unknown role gets only the employee-level attendance surface.
 class _HomeScreen extends ConsumerWidget {
   const _HomeScreen();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
-    if (user != null && user.isEmployee) {
-      return const AttendanceScreen();
-    }
+    return homeScreenForUser(user);
+  }
+}
+
+/// Pure landing decision kept public so fail-closed behavior is testable.
+Widget homeScreenForUser(User? user) {
+  if (user?.canUseDocumentWorkflow == true) {
     return const DocumentsHomeScreen();
   }
+
+  return const AttendanceScreen();
 }
 
 class _AuthRouterNotifier extends ChangeNotifier {

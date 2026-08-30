@@ -7,6 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/user.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
+import '../../../auth/presentation/widgets/session_staleness_notice.dart';
 import '../../../notifications/presentation/widgets/notification_bell_icon.dart';
 import '../../domain/attendance_record.dart';
 import '../../domain/attendance_window.dart';
@@ -140,6 +141,7 @@ class AttendanceScreen extends ConsumerWidget {
               isHome: isHome,
               onLogout: () => _confirmAndLogout(context, ref),
             ),
+            const SessionStalenessNotice(),
             Expanded(
               child: RefreshIndicator(
                 color: AppColors.primary,
@@ -181,15 +183,12 @@ class AttendanceScreen extends ConsumerWidget {
                     LeaveBalanceCard(
                       onTap: () => context.push('/attendance/leave'),
                     ),
-                    if (user?.isManager == true) ...[
-                      const SizedBox(height: 12),
-                      _LeaveActions(
-                        onRequest: () =>
-                            context.push('/attendance/leave/new'),
-                        onApprovals: () => context
-                            .push('/attendance/leave', extra: {'tab': 1}),
-                      ),
-                    ],
+                    AttendanceManagerActions(
+                      user: user,
+                      onRequest: () => context.push('/attendance/leave/new'),
+                      onApprovals: () =>
+                          context.push('/attendance/leave', extra: {'tab': 1}),
+                    ),
 
                     const SizedBox(height: 28),
                     Row(
@@ -307,7 +306,7 @@ class _AttendanceHeader extends StatelessWidget {
                     ),
                     if (user != null)
                       Text(
-                        '${user!.name} · ${user!.role}',
+                        '${user!.name} · ${user!.role ?? 'صلاحيات محدودة'}',
                         style: const TextStyle(
                           fontSize: 11,
                           color: AppColors.textOnDark2,
@@ -386,23 +385,23 @@ class _StatusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, subtitle, icon, color) = switch (status) {
       AttendanceType.checkIn => (
-        'أنت الآن في العمل',
-        'آخر تسجيل: حضور',
-        Icons.work_outline_rounded,
-        AppColors.approved,
-      ),
+          'أنت الآن في العمل',
+          'آخر تسجيل: حضور',
+          Icons.work_outline_rounded,
+          AppColors.approved,
+        ),
       AttendanceType.checkOut => (
-        'أنت الآن خارج العمل',
-        'آخر تسجيل: انصراف',
-        Icons.home_outlined,
-        AppColors.text2,
-      ),
+          'أنت الآن خارج العمل',
+          'آخر تسجيل: انصراف',
+          Icons.home_outlined,
+          AppColors.text2,
+        ),
       null => (
-        'لم تُسجّل أي حضور بعد',
-        'ابدأ يومك بتسجيل الحضور',
-        Icons.schedule_outlined,
-        AppColors.pending,
-      ),
+          'لم تُسجّل أي حضور بعد',
+          'ابدأ يومك بتسجيل الحضور',
+          Icons.schedule_outlined,
+          AppColors.pending,
+        ),
     };
 
     return Container(
@@ -478,89 +477,89 @@ class _CheckInOutButton extends StatelessWidget {
     return Opacity(
       opacity: isBlocked ? 0.55 : 1,
       child: Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(AppColors.r3xl),
-      child: InkWell(
-        onTap: (isCapturing || isBlocked) ? null : onTap,
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(AppColors.r3xl),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 28),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [AppColors.primary, AppColors.primaryGrad],
+        child: InkWell(
+          onTap: (isCapturing || isBlocked) ? null : onTap,
+          borderRadius: BorderRadius.circular(AppColors.r3xl),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 28),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
+                colors: [AppColors.primary, AppColors.primaryGrad],
+              ),
+              borderRadius: BorderRadius.circular(AppColors.r3xl),
+              boxShadow: AppColors.shGold,
             ),
-            borderRadius: BorderRadius.circular(AppColors.r3xl),
-            boxShadow: AppColors.shGold,
+            child: isCapturing
+                ? const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: AppColors.accent,
+                        ),
+                      ),
+                      SizedBox(height: 14),
+                      Text(
+                        'جارٍ تحديد الموقع والتقاط الصورة…',
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 13,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.14),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isCheckIn
+                              ? Icons.fingerprint_rounded
+                              : Icons.exit_to_app_rounded,
+                          color: AppColors.accent,
+                          size: 28,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        label,
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 19,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        disabledReason ??
+                            'يلتقط موقعك وصورة شخصية ويسجلهما تلقائيًا',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.72),
+                        ),
+                      ),
+                    ],
+                  ),
           ),
-          child: isCapturing
-              ? const Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: AppColors.accent,
-                      ),
-                    ),
-                    SizedBox(height: 14),
-                    Text(
-                      'جارٍ تحديد الموقع والتقاط الصورة…',
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 13,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.14),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        isCheckIn
-                            ? Icons.fingerprint_rounded
-                            : Icons.exit_to_app_rounded,
-                        color: AppColors.accent,
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 19,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      disabledReason ??
-                          'يلتقط موقعك وصورة شخصية ويسجلهما تلقائيًا',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withValues(alpha: 0.72),
-                      ),
-                    ),
-                  ],
-                ),
         ),
       ),
-    ),
     );
   }
 }
@@ -723,7 +722,9 @@ class _TodayRecordTile extends ConsumerWidget {
                     ),
                     // Worked hours live on the checkout row — and a refused one
                     // contributed none, so they would be a lie here.
-                    if (!isCheckIn && workHours != null && !record.isRejected) ...[
+                    if (!isCheckIn &&
+                        workHours != null &&
+                        !record.isRejected) ...[
                       const SizedBox(height: 2),
                       Text(
                         'ساعات العمل: ${formatWorkHours(workHours)}',
@@ -996,6 +997,33 @@ class _ApprovedLeaveBanner extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The real role gate around the manager-only leave affordances.
+///
+/// Kept as a widget so its deny-by-default behaviour can be rendered directly
+/// in an authorization widget test without bootstrapping attendance services.
+class AttendanceManagerActions extends StatelessWidget {
+  const AttendanceManagerActions({
+    required this.user,
+    required this.onRequest,
+    required this.onApprovals,
+    super.key,
+  });
+
+  final User? user;
+  final VoidCallback onRequest;
+  final VoidCallback onApprovals;
+
+  @override
+  Widget build(BuildContext context) {
+    if (user?.isManager != true) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: _LeaveActions(onRequest: onRequest, onApprovals: onApprovals),
     );
   }
 }
