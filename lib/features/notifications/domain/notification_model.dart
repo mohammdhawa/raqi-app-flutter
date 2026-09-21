@@ -135,6 +135,9 @@ enum NotificationType {
       case 'leave_request_reviewed':
       case 'leave_request_approval_reassigned':
       case 'leave_excuse_recorded':
+      case 'leave_excuse_cancelled':
+      // HR cut an approved leave short because the employee came back to work.
+      case 'leave_returned_to_work':
         return NotificationType.leave;
       case 'attendance_checkout_reminder':
         return NotificationType.attendanceCheckoutReminder;

@@ -26,7 +26,18 @@ import 'attendance_window.dart' show isWorkingDay;
 enum LeaveStatus {
   pending,
   approved,
-  rejected;
+  rejected,
+
+  /// The entry no longer stands. Two different things reach it, and neither is
+  /// a rejection — nobody refused a request:
+  ///   • HR retracted an excuse it filed by mistake, or
+  ///   • the employee came back to work on the leave's first day, so there was
+  ///     no shorter leave left to keep.
+  ///
+  /// It must be its own value rather than falling through to [pending]: a row
+  /// the server is done with would otherwise be shown to the employee as still
+  /// awaiting a decision that is never coming.
+  cancelled;
 
   static LeaveStatus fromString(String? raw) {
     switch (raw) {
@@ -34,6 +45,8 @@ enum LeaveStatus {
         return LeaveStatus.approved;
       case 'rejected':
         return LeaveStatus.rejected;
+      case 'cancelled':
+        return LeaveStatus.cancelled;
       default:
         return LeaveStatus.pending;
     }
@@ -43,12 +56,14 @@ enum LeaveStatus {
         LeaveStatus.pending => 'pending',
         LeaveStatus.approved => 'approved',
         LeaveStatus.rejected => 'rejected',
+        LeaveStatus.cancelled => 'cancelled',
       };
 
   String get arabicLabel => switch (this) {
         LeaveStatus.pending => 'قيد الانتظار',
         LeaveStatus.approved => 'معتمدة',
         LeaveStatus.rejected => 'مرفوضة',
+        LeaveStatus.cancelled => 'ملغاة',
       };
 }
 
