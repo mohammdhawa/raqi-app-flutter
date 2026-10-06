@@ -261,6 +261,17 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       ref.invalidate(leaveBalanceProvider);
     }
 
+    // The mirror case, moving the balance the other way: the employee came back
+    // before their leave was over, so the days they did not take were handed
+    // back. `days_returned` is already 0 for a non-deducting type, so it — not
+    // a second `deducts_balance` check — is what says whether anything moved,
+    // and the same "don't send them to look at a balance that didn't change"
+    // rule applies. (FCM data values are strings.)
+    if (notification.data['type'] == 'leave_returned_to_work' &&
+        (int.tryParse(notification.data['days_returned']?.toString() ?? '') ?? 0) > 0) {
+      ref.invalidate(leaveBalanceProvider);
+    }
+
     // Navigate based on the payload. A leave_request_id always wins so leave
     // notifications open the relevant request regardless of `type`.
     final leaveId = notification.leaveRequestId;

@@ -29,6 +29,14 @@ class LeaveStatusChip extends StatelessWidget {
           AppColors.rejectedText,
           AppColors.rejectedBg,
         ),
+      // Deliberately not the rejection red: nobody refused this. It is an entry
+      // that stopped standing — withdrawn by HR, or ended because the employee
+      // came back to work — so it reads as spent rather than denied.
+      LeaveStatus.cancelled => (
+          AppColors.text3,
+          AppColors.text2,
+          AppColors.surface2,
+        ),
     };
 
     return Container(

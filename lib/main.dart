@@ -12,6 +12,7 @@ import 'core/router/app_router.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/payload_ids.dart';
+import 'features/attendance/presentation/providers/attendance_capture_recovery.dart';
 import 'features/attendance/presentation/providers/attendance_controller.dart';
 import 'features/attendance/presentation/providers/attendance_sync_service.dart';
 import 'features/attendance/presentation/providers/leave_providers.dart';
@@ -98,11 +99,22 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp>
     ref.listenManual(authControllerProvider, (previous, next) {
       if (next is AuthAuthenticated) {
         syncService.syncPending();
-        // Reclaim selfie files orphaned by a mid-capture/mid-sync process
-        // kill — best-effort, off the critical path.
-        syncService.sweepOrphanedSelfies();
+        unawaited(_recoverCaptureThenSweep(syncService));
       }
     });
+  }
+
+  /// Finishes a check-in/out whose process the OS killed while the camera was
+  /// open (once per process — later logins wait for that same run), THEN
+  /// reclaims orphaned selfies. The order matters: recovery copies the photo
+  /// into the selfie directory before its queue row exists, and a sweep
+  /// running in between would delete it as an orphan.
+  Future<void> _recoverCaptureThenSweep(
+      AttendanceSyncService syncService) async {
+    await ref.read(attendanceCaptureRecoveryProvider).recoverOnce();
+    // Reclaim selfie files orphaned by a mid-capture/mid-sync process
+    // kill — best-effort, off the critical path.
+    await syncService.sweepOrphanedSelfies();
   }
 
   // Session cache cleanup used to live here, as a listener on the auth state.

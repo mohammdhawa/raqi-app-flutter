@@ -26,6 +26,7 @@ class PendingAttendanceRecord {
     required this.recordedAt,
     this.status = AttendanceSyncStatus.pending,
     this.errorMessage,
+    this.operationId,
   });
 
   /// Local SQLite row id — null until first inserted.
@@ -47,6 +48,12 @@ class PendingAttendanceRecord {
   /// Last error message from a failed sync attempt, if any.
   final String? errorMessage;
 
+  /// The capture that produced this row (see `AttendanceCaptureDraft`).
+  /// UNIQUE in SQLite, so a capture recovered after a process kill can never
+  /// be queued twice. Null on rows from before it existed. Local only — the
+  /// backend has no idempotency key to receive it.
+  final String? operationId;
+
   bool get isPending => status == AttendanceSyncStatus.pending;
   bool get isSynced => status == AttendanceSyncStatus.synced;
   bool get isFailed => status == AttendanceSyncStatus.failed;
@@ -66,6 +73,7 @@ class PendingAttendanceRecord {
     recordedAt: recordedAt,
     status: status ?? this.status,
     errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+    operationId: operationId,
   );
 
   factory PendingAttendanceRecord.fromMap(Map<String, dynamic> map) =>
@@ -78,6 +86,7 @@ class PendingAttendanceRecord {
         recordedAt: DateTime.parse(map['recorded_at'] as String),
         status: AttendanceSyncStatus.fromString(map['status'] as String?),
         errorMessage: map['error_message'] as String?,
+        operationId: map['operation_id'] as String?,
       );
 
   Map<String, dynamic> toMap() => {
@@ -89,5 +98,6 @@ class PendingAttendanceRecord {
     'recorded_at': recordedAt.toIso8601String(),
     'status': status.name,
     'error_message': errorMessage,
+    if (operationId != null) 'operation_id': operationId,
   };
 }
