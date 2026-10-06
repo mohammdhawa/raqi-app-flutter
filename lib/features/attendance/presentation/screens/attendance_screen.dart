@@ -13,6 +13,7 @@ import '../../domain/attendance_record.dart';
 import '../../domain/attendance_window.dart';
 import '../../domain/pending_attendance_record.dart' show AttendanceSyncStatus;
 import '../../domain/today_attendance_item.dart';
+import '../providers/attendance_capture_recovery.dart';
 import '../providers/attendance_controller.dart';
 import '../providers/attendance_queue_controller.dart';
 import '../providers/leave_providers.dart';
@@ -86,8 +87,34 @@ class AttendanceScreen extends ConsumerWidget {
     }
   }
 
+  /// Shows startup capture recovery's one-shot result — a check-in/out
+  /// finished after the OS killed the app mid-camera, or one that could not
+  /// be. Post-frame rather than ref.listen: recovery usually finishes before
+  /// this screen first builds, and a listener never sees a value that was
+  /// already set when it subscribed.
+  void _showCaptureNotice(BuildContext context, WidgetRef ref) {
+    final notice = ref.watch(attendanceCaptureNoticeProvider);
+    if (notice == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Identity check: several builds can queue a callback for one notice.
+      if (!context.mounted ||
+          !identical(ref.read(attendanceCaptureNoticeProvider), notice)) {
+        return;
+      }
+      ref.read(attendanceCaptureNoticeProvider.notifier).state = null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor:
+              notice.isError ? AppColors.rejected : AppColors.approved,
+          content: Text(notice.message),
+        ),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    _showCaptureNotice(context, ref);
     // A queued record the server rejects is surfaced inline on its own row in
     // "today's records" below (a red, dismissible tile carrying the server's
     // Arabic message). We deliberately don't also raise a global SnackBar for
