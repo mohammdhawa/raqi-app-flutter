@@ -5,12 +5,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../auth/presentation/providers/auth_controller.dart';
+import '../../data/attendance_local_db.dart';
 import '../../data/attendance_repository.dart';
 import '../../data/selfie_storage.dart';
+import '../../domain/attendance_capture_draft.dart';
 import '../../domain/attendance_record.dart';
 import '../../domain/attendance_window.dart';
 import '../../domain/pending_attendance_record.dart';
 import '../../domain/today_attendance_item.dart';
+import 'attendance_capture_recovery.dart';
 import 'attendance_queue_controller.dart';
 import 'attendance_sync_service.dart';
 
@@ -58,14 +62,28 @@ class AttendanceControllerState {
 /// the server, then runs the capture flow (GPS → front-camera selfie →
 /// local queue → background sync) whenever the user taps the action button.
 class AttendanceController extends StateNotifier<AttendanceControllerState> {
-  AttendanceController(this._repo, this._queue, this._syncService)
-      : super(const AttendanceControllerState()) {
+  AttendanceController(
+    this._repo,
+    this._queue,
+    this._syncService,
+    this._db,
+    this._recovery,
+    this._userId,
+  ) : super(const AttendanceControllerState()) {
     _bootstrap();
   }
 
   final AttendanceRepository _repo;
   final AttendanceQueueController _queue;
   final AttendanceSyncService _syncService;
+
+  /// Holds the capture draft that survives an OS kill during the camera.
+  final AttendanceLocalDb _db;
+
+  /// Reads and clears that same draft at startup — awaited before a capture
+  /// writes a new one.
+  final AttendanceCaptureRecovery _recovery;
+  final int? _userId;
 
   /// Local calendar day of the last successful fetch, so [refreshToday] can
   /// skip redundant refetches on resumes within the same day.
@@ -110,9 +128,12 @@ class AttendanceController extends StateNotifier<AttendanceControllerState> {
   }
 
   /// Runs the full capture flow for [type] (the action the user tapped —
-  /// "تسجيل حضور" or "تسجيل انصراف"): GPS fix, front-camera selfie, then
-  /// persists to the local queue immediately so it survives app kills,
-  /// and kicks off a background sync attempt.
+  /// "تسجيل حضور" or "تسجيل انصراف"): GPS fix, a durable capture draft,
+  /// front-camera selfie, then persists to the local queue immediately so it
+  /// survives app kills, and kicks off a background sync attempt.
+  ///
+  /// The draft is what lets `AttendanceCaptureRecovery` finish the record if
+  /// the OS kills this process while the external camera is open.
   ///
   /// Returns true once the record is safely queued locally — the caller
   /// doesn't need to wait for the network round-trip.
@@ -121,6 +142,16 @@ class AttendanceController extends StateNotifier<AttendanceControllerState> {
     state = state.copyWith(isCapturing: true, clearCaptureError: true);
 
     try {
+      final userId = _userId;
+      if (userId == null) {
+        throw StateError('Cannot record attendance while signed out.');
+      }
+
+      // Startup recovery may still be resolving a draft left by a killed
+      // process; let it finish before this capture writes its own, or it
+      // could read and clear ours while the camera is open.
+      await _recovery.recoverOnce();
+
       final position = await _capturePosition();
       if (position == null) {
         state = state.copyWith(
@@ -131,30 +162,25 @@ class AttendanceController extends StateNotifier<AttendanceControllerState> {
         return false;
       }
 
-      final selfiePath = await _captureSelfie();
-      if (selfiePath == null) {
+      final queued = await captureWithDraft(
+        db: _db,
+        draft: AttendanceCaptureDraft(
+          operationId: newAttendanceOperationId(),
+          userId: userId,
+          type: type,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          cameraOpenedAt: DateTime.now(),
+        ),
+        captureSelfie: _captureSelfie,
+        enqueue: _queue.addOwningSelfie,
+      );
+      if (queued == null) {
         state = state.copyWith(
           isCapturing: false,
           captureError: 'لم يتم التقاط صورة شخصية.',
         );
         return false;
-      }
-
-      try {
-        await _queue.add(
-          PendingAttendanceRecord(
-            type: type,
-            latitude: position.latitude,
-            longitude: position.longitude,
-            selfiePath: selfiePath,
-            recordedAt: DateTime.now(),
-          ),
-        );
-      } catch (_) {
-        // The persisted selfie is only ever cleaned up through its queue
-        // row — if the insert fails, delete the copy or it leaks forever.
-        deleteSelfieQuietly(await resolveSelfiePath(selfiePath));
-        rethrow;
       }
 
       if (!mounted) return true;
@@ -224,6 +250,9 @@ final attendanceControllerProvider =
     ref.watch(attendanceRepositoryProvider),
     ref.watch(attendanceQueueProvider.notifier),
     ref.watch(attendanceSyncServiceProvider),
+    ref.watch(attendanceLocalDbProvider),
+    ref.watch(attendanceCaptureRecoveryProvider),
+    ref.watch(currentUserProvider.select((u) => u?.id)),
   );
 });
 

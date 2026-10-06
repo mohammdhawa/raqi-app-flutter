@@ -43,6 +43,20 @@ class AttendanceQueueController extends StateNotifier<List<PendingAttendanceReco
     return saved;
   }
 
+  /// [add] for a record whose selfie was persisted just for it. That copy is
+  /// only ever cleaned up through its queue row — if the insert fails, it is
+  /// deleted here, or it leaks forever.
+  Future<PendingAttendanceRecord> addOwningSelfie(
+    PendingAttendanceRecord record,
+  ) async {
+    try {
+      return await add(record);
+    } catch (_) {
+      deleteSelfieQuietly(await resolveSelfiePath(record.selfiePath));
+      rethrow;
+    }
+  }
+
   Future<void> markSynced(int id) =>
       _setStatus(id, AttendanceSyncStatus.synced, clearError: true);
 
