@@ -8,9 +8,11 @@ import '../../../../shared/utils/format.dart';
 import '../../../../shared/widgets/day_state.dart';
 import '../../../../shared/widgets/status_pill.dart';
 import '../../domain/attendance_record.dart';
+import '../../domain/attendance_twins.dart';
 import '../../domain/month_days.dart';
 import '../../domain/pending_attendance_record.dart';
 import '../providers/attendance_controller.dart';
+import '../providers/attendance_queue_controller.dart';
 
 const _weekdayHeaders = [
   'سبت',
@@ -167,21 +169,30 @@ Future<void> showDaySheet(BuildContext context, DayEntry entry) {
         Navigator.of(sheetContext).pop();
         context.push('/attendance/history?date=${_isoDate(entry.day)}');
       },
+      onClose: () => Navigator.of(sheetContext).pop(),
     ),
   );
 }
 
 class _DaySheet extends StatelessWidget {
-  const _DaySheet({required this.entry, required this.onOpenHistory});
+  const _DaySheet({
+    required this.entry,
+    required this.onOpenHistory,
+    required this.onClose,
+  });
 
   final DayEntry entry;
   final VoidCallback onOpenHistory;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
     final state = entry.state;
-    // Synced local rows are already shown through their remote twin.
-    final pending = entry.pending.where((p) => !p.isSynced).toList();
+    // A synced local row with a remote twin is already shown through that
+    // twin; one the stale month fetch has not returned yet is listed itself.
+    final pending = entry.pending
+        .where((p) => !p.isSynced || !hasRemoteTwin(p, entry.records))
+        .toList();
     final hasRows = entry.records.isNotEmpty || pending.isNotEmpty;
     final showHistory =
         state == DayState.rejected || state == DayState.incomplete;
@@ -206,7 +217,7 @@ class _DaySheet extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             for (final r in entry.records) _RemoteRow(record: r),
-            for (final p in pending) _PendingRow(record: p),
+            for (final p in pending) _PendingRow(record: p, onDismissed: onClose),
             if (entry.worked > Duration.zero)
               _InfoLine(
                 label: 'ساعات العمل',
@@ -264,10 +275,16 @@ class _InfoLine extends StatelessWidget {
 }
 
 class _RowShell extends StatelessWidget {
-  const _RowShell({required this.title, required this.pill, this.detail});
+  const _RowShell({
+    required this.title,
+    required this.pill,
+    this.detail,
+    this.action,
+  });
   final String title;
   final Widget pill;
   final String? detail;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -294,6 +311,8 @@ class _RowShell extends StatelessWidget {
             const SizedBox(height: 4),
             Text(detail!, style: AppTheme.caption(color: AppColors.text2)),
           ],
+          if (action != null)
+            Align(alignment: AlignmentDirectional.centerEnd, child: action),
         ],
       ),
     );
@@ -318,29 +337,62 @@ class _RemoteRow extends StatelessWidget {
     if (record.isMissingCheckout) {
       return _RowShell(title: title, pill: StatusPill.day(DayState.incomplete));
     }
+    return _RowShell(title: title, pill: const _ConfirmedPill());
+  }
+}
+
+/// A row from this device's queue. Pending rows await sync; synced ones the
+/// month fetch has not returned yet are confirmed; failed ones were refused
+/// by the server, show why, and can be dismissed — the only place left that
+/// offers it.
+class _PendingRow extends ConsumerWidget {
+  const _PendingRow({required this.record, required this.onDismissed});
+  final PendingAttendanceRecord record;
+
+  /// Closes the sheet once the row is dismissed: the entry it shows is a
+  /// snapshot and would still list the row.
+  final VoidCallback onDismissed;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final title =
+        '${record.type.arabicLabel} · ${isolateLtr(formatClock(record.recordedAt))}';
+    if (record.isSynced) {
+      return _RowShell(title: title, pill: const _ConfirmedPill());
+    }
+    if (!record.isFailed) {
+      return _RowShell(title: title, pill: StatusPill.day(DayState.pendingSync));
+    }
+    final id = record.id;
     return _RowShell(
       title: title,
-      pill: const StatusPill(
-        label: 'مؤكد',
-        icon: Icons.check_rounded,
-        fg: AppColors.dayPresentText,
-        bg: AppColors.dayPresentBg,
-      ),
+      pill: StatusPill.day(DayState.rejected),
+      detail: record.errorMessage,
+      action: id == null
+          ? null
+          : TextButton(
+              onPressed: () {
+                final queue = ref.read(attendanceQueueProvider.notifier);
+                onDismissed();
+                queue.dismiss(id);
+              },
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              child: const Text('حذف'),
+            ),
     );
   }
 }
 
-class _PendingRow extends StatelessWidget {
-  const _PendingRow({required this.record});
-  final PendingAttendanceRecord record;
+class _ConfirmedPill extends StatelessWidget {
+  const _ConfirmedPill();
 
   @override
   Widget build(BuildContext context) {
-    return _RowShell(
-      title:
-          '${record.type.arabicLabel} · ${isolateLtr(formatClock(record.recordedAt))}',
-      pill: StatusPill.day(DayState.pendingSync),
-      detail: record.isFailed ? record.errorMessage : null,
+    return const StatusPill(
+      label: 'مؤكد',
+      icon: Icons.check_rounded,
+      fg: AppColors.dayPresentText,
+      bg: AppColors.dayPresentBg,
     );
   }
 }

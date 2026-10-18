@@ -58,7 +58,10 @@ DateTime _dayKey(DateTime d) {
 /// 2. a still-pending local row with no remote twin → pendingSync
 ///    (synced rows stay in the queue but are not "awaiting sync")
 /// 3. a valid check-in missing its checkout → incomplete
-/// 4. a valid check-in → present
+/// 4. a valid check-in → present. A **synced** local check-in with no remote
+///    twin counts too: the server confirmed it and the month fetch is merely
+///    stale, so the calendar agrees with the hero. It adds nothing to
+///    `worked` (a local check-out carries no `workHours`).
 /// 5. an approved leave covering the day → leave
 /// 6. only rejected remote rows or failed local rows → rejected
 /// 7. otherwise → noRecord
@@ -88,6 +91,10 @@ List<DayEntry> deriveMonthDays({
     final valid = dayRecords.where((r) => !r.isRejected).toList();
     final validCheckIns =
         valid.where((r) => r.type == AttendanceType.checkIn).toList();
+    final hasSyncedLocalCheckIn = dayLocal.any((p) =>
+        p.isSynced &&
+        p.type == AttendanceType.checkIn &&
+        !hasRemoteTwin(p, dayRecords));
     final worked = valid
         .where((r) => r.type == AttendanceType.checkOut)
         .fold<Duration>(
@@ -114,7 +121,7 @@ List<DayEntry> deriveMonthDays({
       state = DayState.pendingSync;
     } else if (validCheckIns.any((r) => r.isMissingCheckout)) {
       state = DayState.incomplete;
-    } else if (validCheckIns.isNotEmpty) {
+    } else if (validCheckIns.isNotEmpty || hasSyncedLocalCheckIn) {
       state = DayState.present;
     } else if (leave != null) {
       state = DayState.leave;

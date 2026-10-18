@@ -3,8 +3,12 @@ import 'package:doc_approval/features/attendance/domain/attendance_record.dart';
 import 'package:doc_approval/features/attendance/domain/leave.dart';
 import 'package:doc_approval/features/attendance/domain/month_days.dart';
 import 'package:doc_approval/features/attendance/domain/pending_attendance_record.dart';
+import 'package:doc_approval/features/attendance/presentation/widgets/month_calendar.dart';
 import 'package:doc_approval/shared/widgets/day_state.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/test_app.dart';
 
 int _id = 0;
 
@@ -128,8 +132,56 @@ void main() {
       local(DateTime(2026, 10, 10, 8), status: AttendanceSyncStatus.synced),
       local(DateTime(2026, 10, 11, 8), status: AttendanceSyncStatus.failed),
     ]);
-    expect(days[9].state, DayState.noRecord);
+    // Synced: confirmed by the server, so a valid check-in (not pendingSync).
+    expect(days[9].state, DayState.present);
     expect(days[10].state, DayState.rejected);
+  });
+
+  // The server confirmed the capture; only the month fetch is stale. The hero
+  // already says present, so the calendar and the month tile must agree.
+  test('a synced local check-in with no remote row counts as present', () {
+    final days = derive(
+      pending: [local(DateTime(2026, 10, 18, 8), status: AttendanceSyncStatus.synced)],
+    );
+    expect(days[17].state, DayState.present);
+    expect(summarizeMonth(days).presentDays, 1);
+  });
+
+  test('a synced local check-out adds no worked time', () {
+    final days = derive(pending: [
+      local(DateTime(2026, 10, 18, 8), status: AttendanceSyncStatus.synced),
+      PendingAttendanceRecord(
+        type: AttendanceType.checkOut,
+        latitude: 0,
+        longitude: 0,
+        selfiePath: 'y.jpg',
+        recordedAt: DateTime(2026, 10, 18, 16),
+        status: AttendanceSyncStatus.synced,
+      ),
+    ]);
+    expect(days[17].state, DayState.present);
+    expect(days[17].worked, Duration.zero);
+  });
+
+  testWidgets('the day sheet lists a synced capture the fetch has not seen',
+      (t) async {
+    final entry = derive(
+      pending: [local(DateTime(2026, 10, 18, 8), status: AttendanceSyncStatus.synced)],
+    )[17];
+    await pumpTestApp(
+      t,
+      Builder(
+        builder: (context) => TextButton(
+          onPressed: () => showDaySheet(context, entry),
+          child: const Text('open'),
+        ),
+      ),
+    );
+    await t.tap(find.text('open'));
+    await t.pumpAndSettle();
+    expect(find.text('لا يوجد تسجيل لهذا اليوم.'), findsNothing);
+    expect(find.textContaining('حضور'), findsWidgets);
+    expect(find.text('مؤكد'), findsOne);
   });
 
   test('a synced local twin does not mask the server row', () {
