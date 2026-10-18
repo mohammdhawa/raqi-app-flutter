@@ -5,16 +5,13 @@ import 'package:go_router/go_router.dart';
 import '../../features/about/about_screen.dart';
 import '../../features/account/presentation/account_screen.dart';
 import '../../features/attendance/presentation/screens/attendance_history_screen.dart';
-import '../../features/attendance/presentation/screens/attendance_screen.dart';
 import '../../features/attendance/presentation/screens/attendance_tab_screen.dart';
 import '../../features/attendance/presentation/screens/leave_request_detail_screen.dart';
 import '../../features/attendance/presentation/screens/leave_request_form_screen.dart';
-import '../../features/auth/domain/user.dart';
 import '../../features/auth/presentation/providers/auth_controller.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/documents/presentation/screens/create_document_screen.dart';
 import '../../features/documents/presentation/screens/document_details_screen.dart';
-import '../../features/documents/presentation/screens/documents_home_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/notifications/domain/notification_model.dart';
 import '../../features/notifications/presentation/screens/broadcast_notification_screen.dart';
@@ -231,17 +228,6 @@ final routerProvider = Provider<GoRouter>((ref) {
     errorBuilder: (_, __) => const _NotFoundScreen(),
   );
 });
-
-/// The pre-shell landing decision: a known document role got the documents
-/// home, everyone else attendance. `/` now renders the shell's Home tab; this
-/// stays only while the role-less fail-closed test still pins it.
-Widget homeScreenForUser(User? user) {
-  if (user?.canUseDocumentWorkflow == true) {
-    return const DocumentsHomeScreen();
-  }
-
-  return const AttendanceScreen();
-}
 
 class _AuthRouterNotifier extends ChangeNotifier {
   _AuthRouterNotifier(Ref ref) {

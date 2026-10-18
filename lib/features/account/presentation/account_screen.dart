@@ -14,7 +14,7 @@ import '../../auth/presentation/providers/auth_controller.dart';
 class AccountScreen extends ConsumerWidget {
   const AccountScreen({super.key});
 
-  /// Moved verbatim from `AttendanceScreen._confirmAndLogout`.
+  /// Confirms before logging out, so a stray tap cannot end the session.
   Future<void> _confirmAndLogout(BuildContext context, WidgetRef ref) async {
     final shouldLogout = await showDialog<bool>(
       context: context,

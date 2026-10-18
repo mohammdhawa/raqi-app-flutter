@@ -8,7 +8,6 @@ import 'package:doc_approval/features/attendance/data/leave_repository.dart';
 import 'package:doc_approval/features/attendance/domain/leave.dart';
 import 'package:doc_approval/features/attendance/presentation/providers/leave_providers.dart';
 import 'package:doc_approval/features/attendance/presentation/screens/leave_request_form_screen.dart';
-import 'package:doc_approval/features/attendance/presentation/widgets/leave_request_tile.dart';
 import 'package:doc_approval/features/auth/domain/user.dart';
 import 'package:doc_approval/features/auth/presentation/providers/auth_controller.dart';
 import 'package:doc_approval/features/notifications/domain/notification_model.dart';
@@ -219,52 +218,6 @@ void main() {
         tester.getTopLeft(firstRow).dy,
         greaterThan(tester.getTopLeft(secondRow).dy),
       );
-    });
-
-    testWidgets('a pending tile shows the current step and total',
-        (tester) async {
-      final request = LeaveRequest(
-        id: 8,
-        startDate: DateTime(2026, 9, 1),
-        endDate: DateTime(2026, 9, 3),
-        status: LeaveStatus.pending,
-        managerId: 12,
-        managerName: 'المدير الثاني',
-        currentApproverId: 12,
-        approvals: const [
-          LeaveApprovalStep(
-            userId: 7,
-            userName: 'المدير الأول',
-            approvalOrder: 1,
-            status: LeaveApprovalStatus.approved,
-          ),
-          LeaveApprovalStep(
-            userId: 12,
-            userName: 'المدير الثاني',
-            approvalOrder: 2,
-            status: LeaveApprovalStatus.pending,
-          ),
-          LeaveApprovalStep(
-            userId: 3,
-            userName: 'الرئيس',
-            approvalOrder: 3,
-            status: LeaveApprovalStatus.pending,
-          ),
-        ],
-        days: 3,
-      );
-
-      await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp(
-            home: Scaffold(
-              body: LeaveRequestTile(request: request, onTap: () {}),
-            ),
-          ),
-        ),
-      );
-
-      expect(find.text('بانتظار: المدير الثاني · 2 / 3'), findsOneWidget);
     });
   });
 }

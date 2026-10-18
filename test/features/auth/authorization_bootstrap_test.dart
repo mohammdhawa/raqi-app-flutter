@@ -4,15 +4,13 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:doc_approval/core/errors/api_failure.dart';
 import 'package:doc_approval/core/network/api_client.dart';
-import 'package:doc_approval/core/router/app_router.dart';
 import 'package:doc_approval/core/storage/token_storage.dart';
-import 'package:doc_approval/features/attendance/presentation/screens/attendance_screen.dart';
 import 'package:doc_approval/features/auth/data/auth_repository.dart';
 import 'package:doc_approval/features/auth/domain/user.dart';
 import 'package:doc_approval/features/auth/presentation/providers/auth_controller.dart';
 import 'package:doc_approval/features/auth/presentation/widgets/session_staleness_notice.dart';
 import 'package:doc_approval/features/documents/domain/document.dart';
-import 'package:doc_approval/features/documents/presentation/screens/documents_home_screen.dart';
+import 'package:doc_approval/features/requests/presentation/providers/requests_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -272,40 +270,25 @@ void main() {
     expect(step.role, isNull);
     expect(step.isManager, isFalse);
     expect(step.isChief, isFalse);
-    expect(homeScreenForUser(user), isA<AttendanceScreen>());
-    expect(homeScreenForUser(user), isNot(isA<DocumentsHomeScreen>()));
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: AttendanceManagerActions(
-            user: user,
-            onRequest: () {},
-            onApprovals: () {},
-          ),
-        ),
-      ),
+    // The shell's gate for every approver affordance: a role-less user gets
+    // none, a known document role gets them.
+    final roleless = ProviderContainer(
+      overrides: [currentUserProvider.overrideWithValue(user)],
     );
+    addTearDown(roleless.dispose);
+    expect(roleless.read(canReviewRequestsProvider), isFalse);
 
-    expect(find.byType(AttendanceManagerActions), findsOne);
-    expect(find.text('طلب إجازة'), findsNothing);
-    expect(find.text('طلبات للموافقة'), findsNothing);
-
-    // Positive control: these are the real buttons used by AttendanceScreen,
-    // not arbitrary strings that could never appear in this widget.
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: AttendanceManagerActions(
-            user: const User(id: 8, name: 'Manager', role: 'manager'),
-            onRequest: () {},
-            onApprovals: () {},
-          ),
+    // Positive control: the same provider is true for a real role, so the
+    // false above is not a provider that can never be true.
+    final manager = ProviderContainer(
+      overrides: [
+        currentUserProvider.overrideWithValue(
+          const User(id: 8, name: 'Manager', role: 'manager'),
         ),
-      ),
+      ],
     );
-
-    expect(find.text('طلب إجازة'), findsOne);
-    expect(find.text('طلبات للموافقة'), findsOne);
+    addTearDown(manager.dispose);
+    expect(manager.read(canReviewRequestsProvider), isTrue);
   });
 }

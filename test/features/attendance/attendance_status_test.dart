@@ -95,7 +95,7 @@ void main() {
     );
 
     expect(latest, isNull);
-    // How attendance_screen.dart computes the action it offers.
+    // How the attendance tab computes the action it offers.
     expect(latest?.type.opposite ?? AttendanceType.checkIn,
         AttendanceType.checkIn);
   });

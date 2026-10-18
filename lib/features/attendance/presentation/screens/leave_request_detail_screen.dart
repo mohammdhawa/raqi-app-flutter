@@ -173,7 +173,7 @@ class _LeaveRequestDetailScreenState
 
     final df = DateFormat('yyyy/MM/dd');
     // The stored label, falling back to the cached vocabulary when the row
-    // carries an id but no text. Never parsed for meaning — see LeaveRequestTile.
+    // carries an id but no text. Never parsed for meaning.
     final typeLabel = (request.leaveType?.isNotEmpty ?? false)
         ? request.leaveType
         : ref.watch(leaveTypeByIdProvider(request.leaveTypeId))?.label;
@@ -453,8 +453,8 @@ String? _chainNameFor(LeaveRequest request, int? userId) {
 /// workflow history. [LeaveRequest.managerName] is retained as the fallback
 /// for legacy rows and partial list projections.
 ///
-/// The id is resolved the way [_LeaveApprovalChain] and LeaveRequestTile
-/// resolve it — `current_approver_id` when the payload carries one, else the
+/// The id is resolved the way [_LeaveApprovalChain] resolves it —
+/// `current_approver_id` when the payload carries one, else the
 /// legacy `manager_id`, which on a pending row still names whoever must act
 /// and afterwards names whoever decided. Reading only `current_approver_id`
 /// left a list projection (which omits it, and omits the nested `manager` that
