@@ -40,7 +40,7 @@ class MonthCalendar extends ConsumerWidget {
   final List<DayEntry> days;
   final ValueChanged<DayEntry> onDayTap;
 
-  static const double _cell = 46;
+  static const double _cell = 52;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -110,6 +110,7 @@ class _DayCell extends StatelessWidget {
       enabled: !isFuture,
       label: label,
       excludeSemantics: true,
+      onTap: isFuture ? null : onTap,
       child: Padding(
         padding: const EdgeInsets.all(2),
         child: Material(
@@ -124,7 +125,7 @@ class _DayCell extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppColors.rMd),
             onTap: isFuture ? null : onTap,
             child: SizedBox(
-              height: MonthCalendar._cell - 4,
+              height: MonthCalendar._cell - 4, // 48 px tap area
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

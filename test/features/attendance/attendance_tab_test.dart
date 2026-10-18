@@ -117,4 +117,22 @@ void main() {
     await _pump(t, pending: 1);
     expect(find.textContaining('سجل واحد بانتظار المزامنة'), findsOneWidget);
   });
+
+  testWidgets('day cells are at least 48 px tall', (t) async {
+    await _pump(t);
+    final ink = find.ancestor(of: find.text('7'), matching: find.byType(InkWell));
+    expect(ink, findsOneWidget);
+    expect(t.getSize(ink).height, greaterThanOrEqualTo(48));
+  });
+
+  testWidgets('a screen reader can open a day through the tap action',
+      (t) async {
+    final handle = t.ensureSemantics();
+    await _pump(t);
+    t.semantics.tap(
+        find.semantics.byLabel('الأربعاء 7 تشرين الأول — حاضر'));
+    await t.pumpAndSettle();
+    expect(find.text('مؤكد'), findsNWidgets(2));
+    handle.dispose();
+  });
 }
