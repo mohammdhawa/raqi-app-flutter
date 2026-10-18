@@ -12,6 +12,7 @@ import '../../data/selfie_storage.dart';
 import '../../domain/attendance_action.dart';
 import '../../domain/attendance_capture_draft.dart';
 import '../../domain/attendance_record.dart';
+import '../../domain/attendance_twins.dart';
 import '../../domain/attendance_window.dart';
 import '../../domain/pending_attendance_record.dart';
 import '../../domain/today_attendance_item.dart';
@@ -440,7 +441,7 @@ AttendanceType? resolveAttendanceStatus({
     // rows) keeps driving status even after the server closed or refused the
     // day, so the UI wrongly keeps the user "checked in" and offers a checkout
     // the server rejects.
-    if (_hasRemoteTwin(r, remoteRecords)) continue;
+    if (hasRemoteTwin(r, remoteRecords)) continue;
     if (latestLocal == null || r.recordedAt.isAfter(latestLocal.recordedAt)) {
       latestLocal = r;
     }
@@ -457,22 +458,6 @@ AttendanceType? resolveAttendanceStatus({
   return latestLocal.recordedAt.isAfter(latestRemote.recordedAt)
       ? (type: latestLocal.type, recordedAt: latestLocal.recordedAt)
       : (type: latestRemote.type, recordedAt: latestRemote.recordedAt);
-}
-
-/// Whether [local] is the same logical check-in/out as a record the server
-/// already returned — matched by type and near-identical time. Used both to
-/// let the authoritative remote copy govern status and to avoid showing a
-/// duplicate tile in "today's records".
-bool _hasRemoteTwin(
-  PendingAttendanceRecord local,
-  Iterable<AttendanceRecord> remoteRecords,
-) {
-  return remoteRecords.any(
-    (rt) =>
-        rt.type == local.type &&
-        rt.recordedAt.difference(local.recordedAt).abs() <
-            const Duration(minutes: 2),
-  );
 }
 
 DateTime _dayOf(DateTime d) {
@@ -512,7 +497,7 @@ final todayAttendanceProvider = Provider<List<TodayAttendanceItem>>((ref) {
 
   final localToday = queue
       .where((r) => _isSameLocalDay(r.recordedAt, today))
-      .where((r) => !_hasRemoteTwin(r, remoteToday));
+      .where((r) => !hasRemoteTwin(r, remoteToday));
 
   final items = [
     ...remoteToday.map(TodayAttendanceItem.remote),
