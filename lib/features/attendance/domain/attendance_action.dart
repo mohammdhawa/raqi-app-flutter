@@ -20,6 +20,8 @@ class AttendanceAction {
 /// Pre-disables the action whenever we can already predict the server will
 /// reject it — cutting down on failed round-trips. The server still has the
 /// final say either way.
+///
+/// [now] is the wall-clock instant (not midnight-truncated).
 AttendanceAction resolveAttendanceAction({
   required AttendanceType? status,
   required bool onApprovedLeave,

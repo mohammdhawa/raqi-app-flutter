@@ -334,11 +334,16 @@ final attendanceStatusProvider = Provider<AttendanceType?>((ref) {
 /// autoDispose because it watches [checkOutBlockedReasonProvider], whose
 /// countdown timer must be torn down once nothing watches the action.
 final attendanceActionProvider = Provider.autoDispose<AttendanceAction>((ref) {
+  // Watched so the action recomputes at midnight; the rule itself gets the
+  // wall clock below.
+  ref.watch(currentLocalDayProvider);
   return resolveAttendanceAction(
     status: ref.watch(attendanceStatusProvider),
+    // Watched in every state, not only when checking in: the home hero card
+    // needs it in every state, and the visible result is unchanged.
     onApprovedLeave: ref.watch(approvedLeaveTodayProvider).valueOrNull != null,
     checkoutBlockedReason: ref.watch(checkOutBlockedReasonProvider),
-    now: ref.watch(currentLocalDayProvider),
+    now: DateTime.now(),
   );
 });
 
