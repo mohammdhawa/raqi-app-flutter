@@ -72,13 +72,16 @@ class PendingSyncBanner extends ConsumerWidget {
           GestureDetector(
             onTap: () => _confirmDiscard(context, ref),
             behavior: HitTestBehavior.opaque,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              child: Text(
-                'حذف',
-                style: AppTheme.bodyS(color: AppColors.pendingText).copyWith(
-                  fontWeight: FontWeight.w700,
-                  decoration: TextDecoration.underline,
+            child: ConstrainedBox(
+              // ≥ 48 px tap target around the short label.
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              child: Center(
+                child: Text(
+                  'حذف',
+                  style: AppTheme.bodyS(color: AppColors.pendingText).copyWith(
+                    fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.underline,
+                  ),
                 ),
               ),
             ),

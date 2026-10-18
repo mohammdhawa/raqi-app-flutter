@@ -110,11 +110,15 @@ RequestItem requestFromDocument(Document d) {
   final waiting = d.status == DocumentStatus.pending
       ? nextPendingApprovers(d)
       : const <User>[];
+  // A document number is an identifier with Latin letters and digits; it
+  // keeps its own order inside the Arabic line.
+  final number = d.documentNumber;
   return RequestItem(
     kind: RequestKind.document,
     id: d.id,
     title: d.title,
-    subtitle: '${d.documentNumber ?? d.templateName ?? 'مستند'}'
+    subtitle:
+        '${number != null ? isolateLtr(number) : d.templateName ?? 'مستند'}'
         ' · ${arabicDayMonth(d.createdAt)}',
     status: switch (d.status) {
       DocumentStatus.pending => RequestStatus.pending,
