@@ -9,6 +9,7 @@ import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../data/attendance_local_db.dart';
 import '../../data/attendance_repository.dart';
 import '../../data/selfie_storage.dart';
+import '../../domain/attendance_action.dart';
 import '../../domain/attendance_capture_draft.dart';
 import '../../domain/attendance_record.dart';
 import '../../domain/attendance_window.dart';
@@ -17,6 +18,7 @@ import '../../domain/today_attendance_item.dart';
 import 'attendance_capture_recovery.dart';
 import 'attendance_queue_controller.dart';
 import 'attendance_sync_service.dart';
+import 'leave_providers.dart';
 
 class AttendanceControllerState {
   const AttendanceControllerState({
@@ -323,6 +325,19 @@ final attendanceStatusProvider = Provider<AttendanceType?>((ref) {
   return resolveAttendanceStatus(
     remoteRecords: ref.watch(attendanceControllerProvider).remoteTodayRecords,
     localRecords: ref.watch(attendanceQueueProvider),
+    now: ref.watch(currentLocalDayProvider),
+  );
+});
+
+/// The next check-in/out action and whether it is pre-disabled.
+///
+/// autoDispose because it watches [checkOutBlockedReasonProvider], whose
+/// countdown timer must be torn down once nothing watches the action.
+final attendanceActionProvider = Provider.autoDispose<AttendanceAction>((ref) {
+  return resolveAttendanceAction(
+    status: ref.watch(attendanceStatusProvider),
+    onApprovedLeave: ref.watch(approvedLeaveTodayProvider).valueOrNull != null,
+    checkoutBlockedReason: ref.watch(checkOutBlockedReasonProvider),
     now: ref.watch(currentLocalDayProvider),
   );
 });

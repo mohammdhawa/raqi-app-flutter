@@ -10,7 +10,6 @@ import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../auth/presentation/widgets/session_staleness_notice.dart';
 import '../../../notifications/presentation/widgets/notification_bell_icon.dart';
 import '../../domain/attendance_record.dart';
-import '../../domain/attendance_window.dart';
 import '../../domain/pending_attendance_record.dart' show AttendanceSyncStatus;
 import '../../domain/today_attendance_item.dart';
 import '../providers/attendance_capture_recovery.dart';
@@ -128,33 +127,9 @@ class AttendanceScreen extends ConsumerWidget {
     final pendingCount = ref.watch(pendingAttendanceCountProvider);
     final topPadding = MediaQuery.of(context).padding.top;
     final isHome = !context.canPop();
-    final nextType = status?.opposite ?? AttendanceType.checkIn;
-
-    // Pre-disable the tapped action whenever we can already predict the server
-    // will reject it — cutting down on failed round-trips. The server still has
-    // the final say either way.
-    String? disabledReason;
-    if (nextType == AttendanceType.checkIn) {
-      // Blocked once the day is complete or on approved leave. A checkout for
-      // today (missing-checkout records are excluded upstream) means the
-      // single daily shift is already done — no second check-in.
-      // checkInBlockedReason stays in the chain even though the calendar no
-      // longer blocks anything: it is the one hook a future day-off rule
-      // would come back through.
-      if (status == AttendanceType.checkOut) {
-        disabledReason = 'لقد أكملت دوام اليوم — تم تسجيل الحضور والانصراف.';
-      } else {
-        disabledReason = checkInBlockedReason(DateTime.now());
-        if (disabledReason == null &&
-            ref.watch(approvedLeaveTodayProvider).valueOrNull != null) {
-          disabledReason = 'لديك إجازة معتمدة اليوم — لا حاجة لتسجيل الحضور.';
-        }
-      }
-    } else {
-      // Checking out: block until the backend's minimum check-in→checkout gap
-      // has elapsed, showing a live countdown while it hasn't.
-      disabledReason = ref.watch(checkOutBlockedReasonProvider);
-    }
+    final action = ref.watch(attendanceActionProvider);
+    final nextType = action.nextType;
+    final disabledReason = action.disabledReason;
 
     return Directionality(
       textDirection: TextDirection.rtl,
