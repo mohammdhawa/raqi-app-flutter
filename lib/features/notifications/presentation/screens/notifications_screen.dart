@@ -207,9 +207,10 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     ref.read(notificationsListProvider.notifier).markAsRead(notification.id);
 
     // A checkout reminder deep-links to the check-in/out screen so the user
-    // can record the انصراف they forgot.
+    // can record the انصراف they forgot. `go`, not `push`: `/attendance` is a
+    // tab root, and pushing one over this root-navigator page breaks the shell.
     if (notification.type == NotificationType.attendanceCheckoutReminder) {
-      if (mounted) context.push('/attendance');
+      if (mounted) context.go('/attendance');
       return;
     }
 
@@ -229,7 +230,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
           date.day == now.day;
       if (!mounted) return;
       if (date == null || isToday) {
-        context.push('/attendance');
+        context.go('/attendance');
       } else {
         context.push(
           '/attendance/history?date=${DateFormat('yyyy-MM-dd').format(date)}',

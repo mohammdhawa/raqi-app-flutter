@@ -5,6 +5,8 @@ import 'package:doc_approval/core/providers/app_info_provider.dart';
 import 'package:doc_approval/core/router/app_router.dart';
 import 'package:doc_approval/features/auth/domain/user.dart';
 import 'package:doc_approval/features/auth/presentation/providers/auth_controller.dart';
+import 'package:doc_approval/features/notifications/data/notifications_repository.dart';
+import 'package:doc_approval/features/notifications/domain/notification_model.dart';
 import 'package:doc_approval/features/requests/presentation/providers/requests_providers.dart';
 import 'package:doc_approval/features/requests/presentation/screens/requests_screen.dart';
 import 'package:flutter/material.dart';
@@ -50,14 +52,38 @@ class _OfflineApiClient extends Fake implements ApiClient {
   Dio get dio => _dio;
 }
 
+/// One unread checkout reminder; marking it read is a no-op.
+class _OneReminderRepository extends Fake implements NotificationsRepository {
+  @override
+  Future<NotificationsPage> list({int page = 1}) async => NotificationsPage(
+        notifications: [
+          AppNotification(
+            id: 1,
+            title: 'reminder',
+            body: 'checkout',
+            type: NotificationType.attendanceCheckoutReminder,
+            createdAt: DateTime(2026, 10, 18, 15),
+          ),
+        ],
+        currentPage: 1,
+        lastPage: 1,
+        total: 1,
+      );
+
+  @override
+  Future<void> markAsRead(int id) async {}
+}
+
 /// Builds the real router with the five tabs replaced by `Text` stubs, except
 /// the requests tab when [requestsTab] is given.
 Future<GoRouter> _pumpRouter(
   WidgetTester t, {
   int pendingDecisions = 0,
   WidgetBuilder? requestsTab,
+  List<Override> overrides = const [],
 }) async {
   final container = ProviderContainer(overrides: [
+    ...overrides,
     authControllerProvider.overrideWith((ref) => _FakeAuth(manager)),
     apiClientProvider.overrideWithValue(_OfflineApiClient()),
     appVersionProvider.overrideWithValue('2.0.0'),
@@ -162,6 +188,36 @@ void main() {
       expect(find.byType(NavigationBar), findsNothing,
           reason: '$loc must cover the tab bar');
     }
+  });
+
+  // A tab root is reached with go, never push: pushing one from a detail
+  // screen on the root navigator duplicates the shell's page key.
+  testWidgets('a pushed detail can leave for a tab root', (t) async {
+    final router = await _pumpRouter(t);
+    router.push('/notifications');
+    await t.pumpAndSettle();
+    router.go('/attendance');
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+    expect(_location(router), '/attendance');
+    expect(find.text('tab:attendance'), findsOne);
+    expect(find.byType(NavigationBar), findsOne);
+  });
+
+  testWidgets('a checkout reminder in the list opens the attendance tab',
+      (t) async {
+    final router = await _pumpRouter(t, overrides: [
+      notificationsRepositoryProvider
+          .overrideWithValue(_OneReminderRepository()),
+    ]);
+    router.push('/notifications');
+    await t.pumpAndSettle();
+    await t.tap(find.text('reminder'));
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+    expect(_location(router), '/attendance');
+    expect(find.text('tab:attendance'), findsOne);
+    expect(find.byType(NavigationBar), findsOne);
   });
 
   testWidgets('the old leave hub lands on the requests inbox', (t) async {
