@@ -48,6 +48,14 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen> {
   late bool _inbox = widget.openInbox;
   _Filter _filter = _Filter.all;
 
+  /// The tab branch keeps this state alive, so `/requests?seg=inbox` reached
+  /// after the tab was first opened arrives here, not in a fresh state.
+  @override
+  void didUpdateWidget(covariant RequestsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.openInbox && !oldWidget.openInbox) _inbox = true;
+  }
+
   /// Leave controllers are refreshed here only; the approvals one is skipped
   /// for users who cannot review so they never trigger an approver request.
   Future<void> _refresh() async {

@@ -245,6 +245,25 @@ void main() {
     expect(find.byWidgetPredicate(opensInbox), findsNothing);
   });
 
+  // The branch keeps its RequestsScreen state alive, so a later deep link to
+  // the inbox arrives as a widget update, not a fresh screen.
+  testWidgets('seg=inbox switches an already-opened requests tab', (t) async {
+    final defaults = ProviderContainer();
+    addTearDown(defaults.dispose);
+    final router =
+        await _pumpRouter(t, requestsTab: defaults.read(tabScreensProvider)[2]);
+
+    router.go('/requests');
+    await t.pumpAndSettle();
+    expect(find.text('طلبات تنتظر قرارك.'), findsNothing);
+
+    router.go('/');
+    await t.pumpAndSettle();
+    router.go('/requests?seg=inbox');
+    await t.pumpAndSettle();
+    expect(find.text('طلبات تنتظر قرارك.'), findsOne);
+  });
+
   testWidgets('five tabs, badge on الطلبات', (t) async {
     final router = await _pumpRouter(t, pendingDecisions: 3);
     router.go('/');
