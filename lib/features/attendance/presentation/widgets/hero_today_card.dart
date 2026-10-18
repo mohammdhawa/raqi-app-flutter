@@ -77,13 +77,20 @@ HeroTodayModel buildHeroModel({
     return const HeroTodayModel(phase: HeroPhase.notCheckedIn);
   }
 
+  // Clock skew between device and server must never print a negative
+  // duration, so every span is clamped at zero.
+  Duration span(DateTime from, DateTime to) {
+    final d = to.difference(from);
+    return d.isNegative ? Duration.zero : d;
+  }
+
   var worked = Duration.zero;
   DateTime? openSince;
   for (final item in valid) {
     if (item.type == AttendanceType.checkIn) {
       openSince = item.recordedAt;
     } else if (openSince != null) {
-      worked += item.recordedAt.difference(openSince);
+      worked += span(openSince, item.recordedAt);
       openSince = null;
     }
   }
@@ -94,7 +101,7 @@ HeroTodayModel buildHeroModel({
     return HeroTodayModel(
       phase: HeroPhase.checkedIn,
       checkedInAt: latest.recordedAt,
-      worked: worked + now.difference(latest.recordedAt),
+      worked: worked + span(latest.recordedAt, now),
       isPendingSync: isPending,
     );
   }
@@ -112,8 +119,7 @@ final heroTodayModelProvider = Provider.autoDispose<HeroTodayModel>((ref) {
   ref.watch(currentLocalDayProvider);
   final leave = ref.watch(approvedLeaveTodayProvider).valueOrNull;
   return buildHeroModel(
-    attendanceEnabled:
-        ref.watch(currentUserProvider)?.attendanceCheck ?? false,
+    attendanceEnabled: ref.watch(currentUserProvider)?.attendanceCheck ?? false,
     today: ref.watch(todayAttendanceProvider),
     approvedLeaveToday: leave,
     leaveTypeLabel: ref.watch(leaveTypeByIdProvider(leave?.leaveTypeId))?.label,

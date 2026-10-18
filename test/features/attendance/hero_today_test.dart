@@ -92,6 +92,19 @@ void main() {
       expect(m.worked, const Duration(hours: 8));
     });
 
+    // Server time ahead of the device clock: the open shift must read zero,
+    // never a negative duration.
+    test('a check-in later than now counts zero, not negative', () {
+      final m = build([inAt(14, 0)]);
+      expect(m.phase, HeroPhase.checkedIn);
+      expect(m.worked, Duration.zero);
+    });
+
+    test('a check-out earlier than its check-in never goes negative', () {
+      final m = build([inAt(9, 0), outAt(8, 0)]);
+      expect(m.worked.isNegative, isFalse);
+    });
+
     test('pending check-out marks the day pending', () {
       final m = build([inAt(8, 2), outAt(16, 2, pending: true)]);
       expect(m.phase, HeroPhase.done);
