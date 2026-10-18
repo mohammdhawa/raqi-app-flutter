@@ -5,6 +5,7 @@ import 'package:doc_approval/features/auth/presentation/providers/auth_controlle
 import 'package:doc_approval/features/requests/domain/request_item.dart';
 import 'package:doc_approval/features/requests/presentation/providers/requests_providers.dart';
 import 'package:doc_approval/features/requests/presentation/screens/requests_screen.dart';
+import 'package:doc_approval/shared/utils/format.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -83,7 +84,7 @@ void main() {
         ));
     expect(find.text('بانتظار قراري'), findsOneWidget);
     // Exact badge text, wrapped in the LTR isolate marks.
-    expect(find.text(' (⁦2⁩)'), findsOneWidget);
+    expect(find.text(' (${isolateLtr('2')})'), findsOneWidget);
     expect(find.text('طلبات تنتظر قرارك.'), findsOneWidget);
     expect(find.text('سارة'), findsOneWidget);
     expect(find.text('خالد'), findsOneWidget);
