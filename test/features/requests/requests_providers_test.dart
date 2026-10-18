@@ -75,7 +75,7 @@ void main() {
     addTearDown(c.dispose);
     expect(c.read(canReviewRequestsProvider), isFalse);
     expect(await c.read(documentsAwaitingMeProvider.future), isEmpty);
-    expect((await c.read(sentDocumentsProvider.future)).documents, isEmpty);
+    expect(c.read(sentDocumentsProvider).requireValue.documents, isEmpty);
     expect(c.read(inboxFeedProvider).valueOrNull, isEmpty);
     expect(c.read(pendingDecisionsCountProvider), 0);
   });

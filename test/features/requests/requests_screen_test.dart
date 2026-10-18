@@ -1,7 +1,10 @@
+import 'package:doc_approval/features/attendance/data/leave_repository.dart';
 import 'package:doc_approval/features/attendance/domain/leave.dart';
 import 'package:doc_approval/features/attendance/presentation/providers/leave_providers.dart';
 import 'package:doc_approval/features/auth/domain/user.dart';
 import 'package:doc_approval/features/auth/presentation/providers/auth_controller.dart';
+import 'package:doc_approval/features/documents/data/documents_repository.dart';
+import 'package:doc_approval/features/documents/domain/document.dart';
 import 'package:doc_approval/features/requests/domain/request_item.dart';
 import 'package:doc_approval/features/requests/presentation/providers/requests_providers.dart';
 import 'package:doc_approval/features/requests/presentation/screens/requests_screen.dart';
@@ -43,9 +46,72 @@ List<Override> _overrides({
       myRequestsFeedProvider.overrideWithValue(AsyncData(mine)),
       inboxFeedProvider.overrideWithValue(AsyncData(inbox)),
       pendingDecisionsCountProvider.overrideWithValue(inbox.length),
+      sentDocumentsHaveMoreProvider.overrideWithValue(false),
       leaveBalanceProvider.overrideWith((ref) async => const LeaveBalance(
           year: 2026, allocatedDays: 14, usedDays: 0, remainingDays: 14)),
     ];
+
+Document _sentDoc(int id, DateTime createdAt) => Document.fromJson({
+      'id': id,
+      'title': 'مستند مرسل $id',
+      'status': 'approved',
+      'created_at': createdAt.toIso8601String(),
+    });
+
+/// Two pages of sent documents; the inbox is empty.
+class _TwoPagesOfSent extends Fake implements DocumentsRepository {
+  final sentPages = <int>[];
+
+  @override
+  Future<DocumentsPage> list({
+    required DocumentListType type,
+    int page = 1,
+    DocumentStatusFilter statusFilter = DocumentStatusFilter.all,
+  }) async {
+    if (type != DocumentListType.sent) {
+      return const DocumentsPage(
+          documents: [], currentPage: 1, lastPage: 1, total: 0);
+    }
+    sentPages.add(page);
+    return DocumentsPage(
+      documents: [
+        page == 1
+            ? _sentDoc(1, DateTime(2026, 10, 10))
+            : _sentDoc(2, DateTime(2026, 10, 1)),
+      ],
+      currentPage: page,
+      lastPage: 2,
+      total: 2,
+    );
+  }
+}
+
+/// One leave filed on 5 October — older than page 1's oldest document.
+class _OneOldLeave extends Fake implements LeaveRepository {
+  @override
+  Future<List<LeaveRequest>> myRequests({
+    LeaveStatusFilter status = LeaveStatusFilter.all,
+    int? year,
+    int? perPage,
+  }) async =>
+      [
+        LeaveRequest(
+          id: 5,
+          leaveType: 'إجازة قديمة',
+          startDate: DateTime(2026, 10, 5),
+          endDate: DateTime(2026, 10, 5),
+          status: LeaveStatus.approved,
+          createdAt: DateTime(2026, 10, 5),
+        ),
+      ];
+
+  @override
+  Future<List<LeaveRequest>> approvals({
+    LeaveStatusFilter status = LeaveStatusFilter.all,
+    int? perPage,
+  }) async =>
+      const [];
+}
 
 void main() {
   testWidgets('role-less user sees no inbox segment and no document option',
@@ -164,5 +230,36 @@ void main() {
     await t.tap(find.text('بانتظار قراري'));
     await t.pumpAndSettle();
     expect(find.text('لا يوجد ما ينتظر قرارك'), findsOneWidget);
+  });
+
+  // The merge hides leaves older than the oldest loaded document while more
+  // documents are unloaded; paging is what makes them reachable again.
+  testWidgets('«عرض المزيد» loads older documents and the leaves they hid',
+      (t) async {
+    t.view.physicalSize = const Size(800, 3000);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    final docs = _TwoPagesOfSent();
+    await pumpTestApp(t, const RequestsScreen(), overrides: [
+      currentUserProvider.overrideWithValue(_manager),
+      documentsRepositoryProvider.overrideWithValue(docs),
+      leaveRepositoryProvider.overrideWithValue(_OneOldLeave()),
+      leaveTypesProvider.overrideWith((ref) async => const []),
+      leaveBalanceProvider.overrideWith((ref) async => const LeaveBalance(
+          year: 2026, allocatedDays: 14, usedDays: 0, remainingDays: 14)),
+    ]);
+
+    expect(find.text('مستند مرسل 1'), findsOne);
+    expect(find.text('مستند مرسل 2'), findsNothing);
+    expect(find.text('إجازة قديمة'), findsNothing);
+
+    await t.tap(find.text('عرض المزيد'));
+    await t.pumpAndSettle();
+
+    expect(docs.sentPages, [1, 2]);
+    expect(find.text('مستند مرسل 2'), findsOne);
+    expect(find.text('إجازة قديمة'), findsOne);
+    expect(find.text('عرض المزيد'), findsNothing,
+        reason: 'the last page is loaded');
   });
 }

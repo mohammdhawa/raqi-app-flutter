@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/api_failure.dart';
 import '../../../attendance/domain/leave.dart';
 import '../../../attendance/presentation/providers/leave_providers.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
@@ -16,17 +17,87 @@ final canReviewRequestsProvider = Provider<bool>((ref) {
   return ref.watch(currentUserProvider)?.canUseDocumentWorkflow ?? false;
 });
 
-const _emptyPage =
-    DocumentsPage(documents: [], currentPage: 1, lastPage: 1, total: 0);
+/// The documents I sent, loaded a page at a time.
+class SentDocuments {
+  const SentDocuments({
+    this.documents = const [],
+    this.page = 0,
+    this.hasMore = false,
+    this.isLoadingMore = false,
+  });
 
-/// Documents the user sent (page 1). Empty without a document role, and
-/// without touching the network.
-final sentDocumentsProvider =
-    FutureProvider.autoDispose<DocumentsPage>((ref) async {
-  if (!ref.watch(canReviewRequestsProvider)) return _emptyPage;
-  return ref
-      .watch(documentsRepositoryProvider)
-      .list(type: DocumentListType.sent);
+  /// Every loaded page, in server order (newest first).
+  final List<Document> documents;
+
+  /// The last page loaded; 0 before the first.
+  final int page;
+  final bool hasMore;
+  final bool isLoadingMore;
+}
+
+/// Pages through `GET /documents?type=sent`. The first page loads on creation;
+/// [loadMore] appends the next one. Older pages matter beyond the documents
+/// themselves: while documents are unloaded, the merged طلباتي list hides
+/// leaves older than the oldest loaded document (see [mergeRequests]).
+class SentDocumentsController extends StateNotifier<AsyncValue<SentDocuments>> {
+  SentDocumentsController(this._repo, {required bool enabled})
+      : super(enabled
+            ? const AsyncLoading()
+            : const AsyncData(SentDocuments())) {
+    if (enabled) _loadFirst();
+  }
+
+  final DocumentsRepository _repo;
+
+  Future<void> _loadFirst() async {
+    final next = await AsyncValue.guard(() async {
+      final p = await _repo.list(type: DocumentListType.sent);
+      return SentDocuments(
+          documents: p.documents, page: p.currentPage, hasMore: p.hasMore);
+    });
+    if (mounted) state = next;
+  }
+
+  /// Loads the next page. A failure keeps what is loaded and leaves
+  /// `hasMore` set, so the user can simply try again.
+  Future<void> loadMore() async {
+    final current = state.valueOrNull;
+    if (current == null || !current.hasMore || current.isLoadingMore) return;
+    state = AsyncData(SentDocuments(
+      documents: current.documents,
+      page: current.page,
+      hasMore: true,
+      isLoadingMore: true,
+    ));
+    try {
+      final p = await _repo.list(
+          type: DocumentListType.sent, page: current.page + 1);
+      if (!mounted) return;
+      state = AsyncData(SentDocuments(
+        documents: [...current.documents, ...p.documents],
+        page: p.currentPage,
+        hasMore: p.hasMore,
+      ));
+    } on ApiFailure {
+      if (mounted) state = AsyncData(current);
+    }
+  }
+}
+
+/// Documents the user sent. Empty without a document role, and without
+/// touching the network. Invalidate it to start again from page 1.
+final sentDocumentsProvider = StateNotifierProvider.autoDispose<
+    SentDocumentsController, AsyncValue<SentDocuments>>((ref) {
+  ref.watch(currentUserProvider.select((u) => u?.id));
+  return SentDocumentsController(
+    ref.watch(documentsRepositoryProvider),
+    enabled: ref.watch(canReviewRequestsProvider),
+  );
+});
+
+/// Whether older sent documents are still unloaded — drives «عرض المزيد».
+final sentDocumentsHaveMoreProvider = Provider.autoDispose<bool>((ref) {
+  return ref.watch(sentDocumentsProvider).valueOrNull?.hasMore ?? false;
 });
 
 /// Pending inbox documents whose turn is the current user's.
@@ -95,7 +166,7 @@ final myRequestsFeedProvider =
     leaveItems: _leaveItems(ref, leaves.requests),
     documents: sent
         .whenData((p) => [for (final d in p.documents) requestFromDocument(d)]),
-    documentsHaveMore: sent.valueOrNull?.hasMore ?? false,
+    documentsHaveMore: ref.watch(sentDocumentsHaveMoreProvider),
   );
 });
 

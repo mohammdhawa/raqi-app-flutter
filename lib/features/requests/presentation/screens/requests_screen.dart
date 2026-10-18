@@ -119,6 +119,10 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen> {
     final showInbox = canReview && _inbox;
     final inboxCount = canReview ? ref.watch(pendingDecisionsCountProvider) : 0;
     final feed = ref.watch(showInbox ? inboxFeedProvider : myRequestsFeedProvider);
+    final moreSent = !showInbox && ref.watch(sentDocumentsHaveMoreProvider);
+    final loadingMore = moreSent &&
+        ref.watch(sentDocumentsProvider
+            .select((s) => s.valueOrNull?.isLoadingMore ?? false));
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -194,6 +198,28 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen> {
                   );
                 },
               ),
+              // Older sent documents — and the leaves the merge hides until
+              // they are loaded — are one page away.
+              if (moreSent && feed.hasValue)
+                Center(
+                  child: loadingMore
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : TextButton(
+                          onPressed: () => ref
+                              .read(sentDocumentsProvider.notifier)
+                              .loadMore(),
+                          style: TextButton.styleFrom(
+                              minimumSize: const Size(48, 48)),
+                          child: const Text('عرض المزيد'),
+                        ),
+                ),
             ],
           ),
         ),
