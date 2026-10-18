@@ -6,6 +6,7 @@ import 'package:doc_approval/features/attendance/presentation/providers/attendan
 import 'package:doc_approval/features/attendance/presentation/providers/month_attendance_providers.dart';
 import 'package:doc_approval/features/attendance/presentation/screens/attendance_tab_screen.dart';
 import 'package:doc_approval/features/attendance/presentation/widgets/hero_today_card.dart';
+import 'package:doc_approval/shared/utils/format.dart';
 import 'package:doc_approval/shared/widgets/day_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -72,7 +73,67 @@ Future<void> _pump(WidgetTester t, {int pending = 0}) async {
   ]);
 }
 
+List<DayEntry> _blankMonth(DateTime month, DateTime today) {
+  final count = DateTime(month.year, month.month + 1, 0).day;
+  return List.generate(count, (i) {
+    final day = DateTime(month.year, month.month, i + 1);
+    return DayEntry(
+      day: day,
+      state: day.isAfter(today) ? DayState.future : DayState.noRecord,
+    );
+  });
+}
+
+/// Pumps the tab on 31 October with the day held in a provider the test can
+/// move, and returns a callback that advances it to 1 November.
+Future<VoidCallback> _pumpAtMonthEnd(WidgetTester t) async {
+  t.view.physicalSize = const Size(800, 3000);
+  t.view.devicePixelRatio = 1;
+  addTearDown(t.view.reset);
+  final day = StateProvider<DateTime>((ref) => DateTime(2026, 10, 31));
+  await pumpTestApp(t, const AttendanceTabScreen(), overrides: [
+    currentLocalDayProvider.overrideWith((ref) => ref.watch(day)),
+    for (final m in [DateTime(2026, 9), DateTime(2026, 10), DateTime(2026, 11)])
+      monthDaysProvider(m).overrideWithValue(
+          AsyncData(_blankMonth(m, DateTime(2026, 10, 31)))),
+    pendingAttendanceCountProvider.overrideWithValue(0),
+    heroTodayModelProvider.overrideWithValue(
+        const HeroTodayModel(phase: HeroPhase.notCheckedIn)),
+    attendanceActionProvider.overrideWithValue(
+        const AttendanceAction(nextType: AttendanceType.checkIn)),
+    attendanceCapturingProvider.overrideWithValue(false),
+  ]);
+  final container =
+      ProviderScope.containerOf(t.element(find.byType(AttendanceTabScreen)));
+  return () => container.read(day.notifier).state = DateTime(2026, 11, 1);
+}
+
 void main() {
+  testWidgets('the current month follows the day across a month rollover',
+      (t) async {
+    final advance = await _pumpAtMonthEnd(t);
+    expect(find.text(arabicMonthYear(DateTime(2026, 10))), findsOne);
+
+    advance();
+    await t.pumpAndSettle();
+
+    expect(find.text(arabicMonthYear(DateTime(2026, 11))), findsOne);
+    expect(find.text(arabicMonthYear(DateTime(2026, 10))), findsNothing);
+  });
+
+  testWidgets('a month the user navigated to stays put across a rollover',
+      (t) async {
+    final advance = await _pumpAtMonthEnd(t);
+    await t.tap(find.byTooltip('الشهر السابق'));
+    await t.pumpAndSettle();
+    expect(find.text(arabicMonthYear(DateTime(2026, 9))), findsOne);
+
+    advance();
+    await t.pumpAndSettle();
+
+    expect(find.text(arabicMonthYear(DateTime(2026, 9))), findsOne);
+  });
+
   testWidgets('calendar labels every past day with its state', (t) async {
     final handle = t.ensureSemantics();
     await _pump(t);

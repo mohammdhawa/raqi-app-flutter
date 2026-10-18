@@ -34,6 +34,17 @@ class _AttendanceTabScreenState extends ConsumerState<AttendanceTabScreen> {
     super.initState();
     final today = ref.read(currentLocalDayProvider);
     _month = DateTime(today.year, today.month);
+    // Kept alive across midnight by the tab shell: someone looking at the
+    // current month keeps looking at the current month when it changes. A
+    // month they navigated to on purpose stays put.
+    ref.listenManual<DateTime>(currentLocalDayProvider, (previous, next) {
+      if (previous == null) return;
+      final wasCurrent = DateTime(previous.year, previous.month);
+      final nowCurrent = DateTime(next.year, next.month);
+      if (_month == wasCurrent && nowCurrent != wasCurrent) {
+        setState(() => _month = nowCurrent);
+      }
+    });
   }
 
   void _shift(int delta) =>
@@ -44,6 +55,7 @@ class _AttendanceTabScreenState extends ConsumerState<AttendanceTabScreen> {
       ref.read(attendanceQueueProvider.notifier).refresh(),
       ref.read(attendanceControllerProvider.notifier).reload(),
     ]);
+    if (!mounted) return;
     ref.invalidate(monthRecordsProvider(_month));
   }
 
