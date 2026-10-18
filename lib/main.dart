@@ -201,7 +201,7 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp>
     // Checkout reminder ("type": "attendance_checkout_reminder") opens the
     // check-in/out screen so the user can record the انصراف they forgot.
     if (data['type'] == 'attendance_checkout_reminder') {
-      router.push('/attendance');
+      router.go('/attendance');
       return;
     }
 
@@ -216,7 +216,7 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp>
           date.month == now.month &&
           date.day == now.day;
       if (date == null || isToday) {
-        router.push('/attendance');
+        router.go('/attendance');
       } else {
         final ymd = '${date.year.toString().padLeft(4, '0')}-'
             '${date.month.toString().padLeft(2, '0')}-'
@@ -265,7 +265,7 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp>
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
-      title: 'سير اعتماد المستندات',
+      title: 'تطبيق الموظف',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       routerConfig: router,
