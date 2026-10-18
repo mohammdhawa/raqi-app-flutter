@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>فريقي</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#224167}a:hover{color:#1A3554}
+</style>
+</helmet>
+<div dir="rtl" style="position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; background: #F6F7FB; font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; color: #1B2A41; overflow: hidden">
+
+<div style="display: flex; align-items: center; gap: 8px; padding: 16px 12px; background: #FFFFFF; border-bottom: 1px solid #E4E6EE">
+<a href="HomeManager.dc.html" aria-label="رجوع" style="width: 44px; height: 44px; border-radius: 12px; color: #224167; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></a>
+<span style="display: flex; flex-direction: column"><h1 style="margin: 0; font-size: 18px; font-weight: 700">فريقي اليوم</h1><span style="font-size: 12px; color: #6B7591">قسم الإنشاءات والأقسام التابعة · 12 موظفاً</span></span>
+</div>
+
+<div style="flex: 1; overflow-y: auto; padding: 14px 16px 24px; display: flex; flex-direction: column; gap: 12px">
+<label style="position: relative; display: block">
+<span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">بحث عن موظف</span>
+<input type="search" placeholder="ابحث بالاسم أو الرقم الوظيفي" style="width: 100%; box-sizing: border-box; height: 48px; border: 1px solid #D2D6E0; border-radius: 12px; padding: 0 44px 0 12px; font-family: inherit; font-size: 14px; background: #FFFFFF">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7591" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; position: absolute; right: 14px; top: 14px" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+</label>
+<div role="group" aria-label="تصفية حسب الحالة" style="display: flex; gap: 6px; overflow-x: auto">
+<sc-for list="{{chips}}" as="c" hint-placeholder-count="5">
+<button type="button" onClick="{{c.pick}}" aria-pressed="{{c.on}}" style="flex-shrink: 0; height: 38px; padding: 0 12px; border-radius: 999px; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid {{c.border}}; background: {{c.bg}}; color: {{c.fg}}">{{c.label}}</button>
+</sc-for>
+</div>
+<div style="background: #FFFFFF; border: 1px solid #E4E6EE; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden">
+<sc-for list="{{people}}" as="p" hint-placeholder-count="8">
+<button type="button" onClick="{{p.open}}" style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 14px; border: 0; border-bottom: 1px solid #E4E6EE; background: #FFFFFF; font-family: inherit; color: #1B2A41; text-align: right; cursor: pointer">
+<span aria-hidden="true" style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 999px; background: #EEF0F6; color: #224167; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px">{{p.initials}}</span>
+<span style="flex: 1; display: flex; flex-direction: column; min-width: 0"><span style="font-size: 14px; font-weight: 700">{{p.name}}</span><span style="font-size: 12px; color: #6B7591">{{p.title}}</span></span>
+<span style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px">
+<span style="padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: {{p.bg}}; color: {{p.fg}}">{{p.label}}</span>
+<span style="font-size: 12px; color: #6B7591">{{p.detail}}</span>
+</span>
+</button>
+</sc-for>
+</div>
+</div>
+
+<sc-if value="{{sheetOpen}}" hint-placeholder-val="{{false}}">
+<div style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end">
+<button type="button" onClick="{{close}}" aria-label="إغلاق" style="flex: 1; border: 0; background: rgba(14,26,43,0.45); cursor: pointer"></button>
+<div role="dialog" aria-label="{{sel.name}}" style="background: #FFFFFF; border-radius: 24px 24px 0 0; padding: 10px 16px 28px; display: flex; flex-direction: column; gap: 14px">
+<span aria-hidden="true" style="align-self: center; width: 40px; height: 4px; border-radius: 999px; background: #D2D6E0"></span>
+<div style="display: flex; align-items: center; gap: 12px">
+<span aria-hidden="true" style="width: 52px; height: 52px; border-radius: 999px; background: #F2E4CC; color: #224167; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px">{{sel.initials}}</span>
+<span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 18px; font-weight: 800">{{sel.name}}</span><span style="font-size: 13px; color: #6B7591">{{sel.title}}</span></span>
+<span style="padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: {{sel.bg}}; color: {{sel.fg}}">{{sel.label}}</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; text-align: center">
+<div style="display: flex; flex-direction: column; padding: 8px 2px; border-radius: 12px; background: #F6F7FB"><span style="font-size: 18px; font-weight: 800">{{sel.m1}}</span><span style="font-size: 11px; color: #6B7591">حضور</span></div>
+<div style="display: flex; flex-direction: column; padding: 8px 2px; border-radius: 12px; background: #F6F7FB"><span style="font-size: 18px; font-weight: 800">{{sel.m2}}</span><span style="font-size: 11px; color: #6B7591">تأخير</span></div>
+<div style="display: flex; flex-direction: column; padding: 8px 2px; border-radius: 12px; background: #F6F7FB"><span style="font-size: 18px; font-weight: 800">{{sel.m3}}</span><span style="font-size: 11px; color: #6B7591">غياب</span></div>
+<div style="display: flex; flex-direction: column; padding: 8px 2px; border-radius: 12px; background: #F6F7FB"><span style="font-size: 18px; font-weight: 800">{{sel.m4}}</span><span style="font-size: 11px; color: #6B7591">إجازة</span></div>
+</div>
+<span style="font-size: 12px; color: #6B7591; margin-top: -6px">تشرين الأول حتى اليوم</span>
+<div style="display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 12px; background: #F6F7FB; color: #6B7591">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+<span style="font-size: 13px">بيانات الراتب غير متاحة بصلاحياتك.</span>
+</div>
+</div>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { filter: 'all', open: null };
+  }
+  renderVals() {
+    const S = {
+      p: { label: 'حاضر', bg: '#E4F2EC', fg: '#1E5A3F' },
+      l: { label: 'متأخر', bg: '#FDEBDD', fg: '#9A3412' },
+      a: { label: 'غائب', bg: '#FBE7E5', fg: '#8A1B17' },
+      v: { label: 'إجازة', bg: '#E3ECF8', fg: '#1F477F' }
+    };
+    const raw = [
+      ['ع د', 'عمر درويش', 'مهندس موقع', 'l', '08:31 · 31 د', [13, 3, 0, 0]],
+      ['م ي', 'ماهر يونس', 'فني تنفيذ', 'l', '08:15 · 15 د', [14, 2, 0, 0]],
+      ['ك ح', 'كريم حداد', 'عامل موقع', 'a', 'لم يسجّل', [11, 1, 2, 0]],
+      ['س ع', 'سلمى عبود', 'مهندسة إنشائية', 'v', 'حتى 20/10', [10, 0, 0, 3]],
+      ['س ح', 'سامر الحلبي', 'مهندس مدني', 'p', '08:02', [9, 2, 1, 2]],
+      ['ن ش', 'نور الشامي', 'مهندسة معمارية', 'p', '07:55', [14, 0, 0, 0]],
+      ['ي ق', 'يوسف قاسم', 'مراقب موقع', 'p', '07:48', [14, 0, 0, 0]],
+      ['ر خ', 'رنا خليل', 'مهندسة مساحة', 'p', '07:58', [13, 1, 0, 0]],
+      ['ب ن', 'باسل نجار', 'فني', 'p', '07:40', [14, 0, 0, 0]],
+      ['ه س', 'هبة سليمان', 'مهندسة', 'p', '07:59', [12, 0, 0, 2]],
+      ['م ع', 'محمد عيسى', 'سائق', 'p', '07:30', [14, 0, 0, 0]],
+      ['أ ز', 'أحمد زين', 'فني كهرباء', 'p', '07:52', [13, 1, 0, 0]]
+    ];
+    const people = raw.map(([initials, name, title, k, detail, m], i) => ({
+      initials, name, title, k, detail, ...S[k], m1: m[0], m2: m[1], m3: m[2], m4: m[3],
+      open: () => this.setState({ open: i })
+    }));
+    const f = this.state.filter;
+    const count = (k) => people.filter((p) => p.k === k).length;
+    const defs = [['all', 'الكل 12'], ['p', 'حاضر ' + count('p')], ['l', 'متأخر ' + count('l')], ['a', 'غائب ' + count('a')], ['v', 'إجازة ' + count('v')]];
+    const sel = this.state.open === null ? null : people[this.state.open];
+    return {
+      chips: defs.map(([id, label]) => ({
+        label, on: f === id,
+        bg: f === id ? '#224167' : '#FFFFFF', fg: f === id ? '#FFFFFF' : '#3D4A63', border: f === id ? '#224167' : '#E4E6EE',
+        pick: () => this.setState({ filter: id })
+      })),
+      people: people.filter((p) => f === 'all' || p.k === f),
+      sheetOpen: !!sel,
+      sel: sel || { name: '', title: '', initials: '', label: '', bg: '', fg: '', m1: '', m2: '', m3: '', m4: '' },
+      close: () => this.setState({ open: null })
+    };
+  }
+}
+</script>
+</body>
+</html>

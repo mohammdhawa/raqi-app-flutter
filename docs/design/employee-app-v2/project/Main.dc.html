@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>الرئيسية — موظف</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#224167}a:hover{color:#1A3554}
+</style>
+</helmet>
+<div dir="rtl" style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; background: #F6F7FB; font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; color: #1B2A41; overflow: hidden">
+<div style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding: 20px 16px 24px">
+
+<header style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<div style="display: flex; align-items: center; gap: 12px">
+<div aria-hidden="true" style="width: 48px; height: 48px; border-radius: 999px; background: #F2E4CC; color: #224167; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px">س ح</div>
+<div style="display: flex; flex-direction: column">
+<span style="font-size: 13px; color: #6B7591">صباح الخير</span>
+<span style="font-size: 18px; font-weight: 700; line-height: 1.3">سامر الحلبي</span>
+<span style="font-size: 12px; color: #6B7591">مهندس مدني · الإدارة الهندسية</span>
+</div>
+</div>
+<a href="Notifications.dc.html" aria-label="الإشعارات، 3 غير مقروءة" style="position: relative; width: 48px; height: 48px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E4E6EE; display: flex; align-items: center; justify-content: center; color: #224167">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>
+<span style="position: absolute; top: 8px; left: 8px; min-width: 16px; height: 16px; border-radius: 999px; background: #B3261E; color: #FFFFFF; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center">3</span>
+</a>
+</header>
+
+<section aria-label="دوام اليوم" style="position: relative; overflow: hidden; background: #224167; border-radius: 22px; padding: 20px; color: #FFFFFF; display: flex; flex-direction: column; gap: 14px">
+<img src="/_blob/27b4f8dc75147b8ffc822d126967292d" alt="" style="position: absolute; width: 230px; height: 230px; left: -70px; top: -60px; opacity: 0.12; pointer-events: none">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; position: relative">
+<span style="font-size: 13px; color: rgba(255,255,255,0.82)">الأحد، 18 تشرين الأول</span>
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; background: {{pillBg}}; color: {{pillColor}}">{{pillText}}</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px; position: relative">
+<span style="font-size: 40px; font-weight: 800; line-height: 1.15">{{bigValue}}</span>
+<span style="font-size: 14px; color: rgba(255,255,255,0.82)">{{bigLabel}}</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; color: rgba(255,255,255,0.82); position: relative">
+<span style="display: inline-flex; align-items: center; gap: 6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>{{subLine}}</span>
+<span style="display: inline-flex; align-items: center; gap: 6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"></path><circle cx="12" cy="9" r="2.5"></circle></svg>المكتب الرئيسي · دمشق</span>
+</div>
+<sc-if value="{{showButton}}" hint-placeholder-val="{{true}}">
+<a href="CheckIn.dc.html" style="position: relative; display: flex; align-items: center; justify-content: center; gap: 10px; height: 54px; border-radius: 14px; background: #C8A36B; color: #1B2A41; font-weight: 700; font-size: 17px; text-decoration: none">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>{{buttonText}}</a>
+</sc-if>
+<sc-if value="{{showDayLink}}" hint-placeholder-val="{{false}}">
+<a href="Attendance.dc.html" style="position: relative; display: flex; align-items: center; justify-content: center; height: 48px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.35); color: #FFFFFF; font-weight: 600; font-size: 15px; text-decoration: none">{{dayLinkText}}</a>
+</sc-if>
+</section>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<a href="Requests.dc.html" style="background: #FFFFFF; border: 1px solid #E4E6EE; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: #1B2A41">
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #6B7591"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2F5FA7" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"></rect><path d="M9 7V5h6v2"></path></svg>رصيد الإجازات</span>
+<span style="font-size: 26px; font-weight: 800; line-height: 1.2">14 <span style="font-size: 14px; font-weight: 600; color: #6B7591">يوماً</span></span>
+<span style="font-size: 12px; color: #6B7591">إجازة سنوية</span>
+</a>
+<a href="Attendance.dc.html" style="background: #FFFFFF; border: 1px solid #E4E6EE; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: #1B2A41">
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #6B7591"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2E7D5B" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>دوام هذا الشهر</span>
+<span style="font-size: 26px; font-weight: 800; line-height: 1.2">11 <span style="font-size: 14px; font-weight: 600; color: #6B7591">يوماً</span></span>
+<span style="font-size: 12px; color: #6B7591"><span dir="ltr">84:30</span> ساعة عمل</span>
+</a>
+</div>
+
+<div style="background: #FFFFFF; border: 1px solid #E4E6EE; border-radius: 16px; padding: 14px; display: flex; align-items: center; gap: 12px">
+<a href="Salary.dc.html" style="flex: 1; display: flex; align-items: center; gap: 12px; text-decoration: none; color: #1B2A41; min-width: 0">
+<span aria-hidden="true" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; background: #F2E4CC; color: #8A6A23; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round"><rect x="3" y="6" width="18" height="14" rx="2"></rect><path d="M3 10h18M16 15h2"></path></svg></span>
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+<span style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700">راتب تشرين الأول <span style="padding: 2px 8px; border-radius: 999px; background: #FAF2E1; color: #8A6A23; font-size: 11px; font-weight: 700">قيد الإعداد</span></span>
+<span style="font-size: 13px; color: #6B7591">آخر راتب محوّل (أيلول): <span dir="ltr" style="font-weight: 700; color: #1B2A41">{{lastPay}}</span></span>
+</span>
+</a>
+<button type="button" onClick="{{toggleMask}}" aria-label="{{maskLabel}}" style="width: 44px; height: 44px; border-radius: 12px; border: 1px solid #E4E6EE; background: #F6F7FB; color: #224167; display: flex; align-items: center; justify-content: center; cursor: pointer">
+<sc-if value="{{masked}}" hint-placeholder-val="{{true}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg></sc-if>
+<sc-if value="{{unmasked}}" hint-placeholder-val="{{false}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M3 3l18 18"></path><path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.3 4.2M6.1 6.1C3.5 7.9 2 12 2 12s3.5 7 10 7c1.6 0 3-.4 4.3-1"></path></svg></sc-if>
+</button>
+</div>
+
+<section aria-labelledby="attn" style="display: flex; flex-direction: column; gap: 8px">
+<h2 id="attn" style="margin: 0; font-size: 16px; font-weight: 700">يحتاج انتباهك</h2>
+<div style="background: #FFFFFF; border: 1px solid #E4E6EE; border-radius: 16px; display: flex; flex-direction: column">
+<a href="Documents.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; min-height: 56px; text-decoration: none; color: #1B2A41; border-bottom: 1px solid #E4E6EE">
+<span aria-hidden="true" style="width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; background: #F2E4CC; color: #8A6A23; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round"><path d="M3 10v4h4l8 5V5L7 10z"></path><path d="M18 9a4 4 0 0 1 0 6"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; min-width: 0"><span style="font-size: 14px; font-weight: 600">تعميم: تعديل أوقات الدوام الشتوي</span><span style="font-size: 12px; color: #6B7591">بانتظار تأكيد الاطلاع</span></span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9099AD" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg>
+</a>
+<a href="RequestDetail.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; min-height: 56px; text-decoration: none; color: #1B2A41; border-bottom: 1px solid #E4E6EE">
+<span aria-hidden="true" style="width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; background: #E4F2EC; color: #2E7D5B; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><path d="m5 12 5 5 9-10"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; min-width: 0"><span style="font-size: 14px; font-weight: 600">قُبلت إجازتك السنوية</span><span style="font-size: 12px; color: #6B7591">11 – 12 تشرين الأول · اكتمل المسار</span></span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9099AD" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg>
+</a>
+<a href="Attendance.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; min-height: 56px; text-decoration: none; color: #1B2A41">
+<span aria-hidden="true" style="width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; background: #FDEBDD; color: #C2410C; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; min-width: 0"><span style="font-size: 14px; font-weight: 600">لم يُسجَّل انصراف يوم السبت 17</span><span style="font-size: 12px; color: #6B7591">راجع اليوم أو قدّم طلب تصحيح</span></span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9099AD" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg>
+</a>
+</div>
+</section>
+
+<div style="background: #FFFFFF; border: 1px solid #E4E6EE; border-radius: 16px; padding: 12px 14px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #6B7591">رقم الموظف</span><span dir="ltr" style="font-size: 14px; font-weight: 700; text-align: right">1042</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #6B7591">المدير المباشر</span><span style="font-size: 14px; font-weight: 700">رامي العلي</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #6B7591">موقع العمل</span><span style="font-size: 14px; font-weight: 700">المكتب الرئيسي</span></div>
+</div>
+
+</div>
+
+<nav aria-label="التنقل الرئيسي" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: #FFFFFF; border-top: 1px solid #E4E6EE; padding: 6px 4px 18px">
+<a href="Main.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 6px; min-height: 52px; color: #224167; font-weight: 700; font-size: 12px; text-decoration: none; border-top: 3px solid #C8A36B">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"></path></svg>الرئيسية</a>
+<a href="Attendance.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 6px; min-height: 52px; color: #6B7591; font-size: 12px; text-decoration: none; border-top: 3px solid transparent">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>دوامي</a>
+<a href="Requests.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 6px; min-height: 52px; color: #6B7591; font-size: 12px; text-decoration: none; border-top: 3px solid transparent">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"></rect><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3"></path></svg>الطلبات</a>
+<a href="Salary.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 6px; min-height: 52px; color: #6B7591; font-size: 12px; text-decoration: none; border-top: 3px solid transparent">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"></rect><path d="M3 10h18M16 15h2"></path></svg>راتبي</a>
+<a href="Account.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 6px; min-height: 52px; color: #6B7591; font-size: 12px; text-decoration: none; border-top: 3px solid transparent">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path></svg>حسابي</a>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dayPhase":{"editor":"enum","options":["before","in","done","holiday","leave"],"default":"before","section":"حالة اليوم"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { masked: true };
+  }
+  renderVals() {
+    const phase = this.props.dayPhase ?? 'before';
+    const P = {
+      before: { pillText: 'لم تسجّل بعد', pillBg: 'rgba(255,255,255,0.16)', pillColor: '#FFFFFF', bigValue: '08:00', bigLabel: 'تبدأ ورديتك', subLine: 'الوردية 08:00 – 16:00', showButton: true, buttonText: 'تسجيل الحضور', showDayLink: false, dayLinkText: '' },
+      in: { pillText: 'حاضر · منذ 08:02', pillBg: '#E4F2EC', pillColor: '#1E5A3F', bigValue: '05:41', bigLabel: 'ساعات العمل اليوم', subLine: 'الوردية 08:00 – 16:00', showButton: true, buttonText: 'تسجيل الانصراف', showDayLink: false, dayLinkText: '' },
+      done: { pillText: 'اكتمل الدوام', pillBg: '#E4F2EC', pillColor: '#1E5A3F', bigValue: '08:06', bigLabel: 'إجمالي ساعات اليوم', subLine: 'حضور 08:02 · انصراف 16:08', showButton: false, buttonText: '', showDayLink: true, dayLinkText: 'عرض تفاصيل اليوم' },
+      holiday: { pillText: 'عطلة', pillBg: '#ECE9F6', pillColor: '#4A3F80', bigValue: 'عطلة رسمية', bigLabel: 'لا يلزم تسجيل الحضور اليوم', subLine: 'يعود الدوام غداً 08:00', showButton: false, buttonText: '', showDayLink: true, dayLinkText: 'عرض تقويم الدوام' },
+      leave: { pillText: 'إجازة', pillBg: '#E3ECF8', pillColor: '#1F477F', bigValue: 'إجازة سنوية', bigLabel: 'حتى الأربعاء 21 تشرين الأول', subLine: 'العودة الخميس 22 · 08:00', showButton: false, buttonText: '', showDayLink: true, dayLinkText: 'عرض طلب الإجازة' }
+    };
+    const p = P[phase] || P.before;
+    const masked = this.state.masked;
+    return {
+      ...p,
+      masked,
+      unmasked: !masked,
+      lastPay: masked ? '•••••• ل.س' : '2,255,000 ل.س',
+      maskLabel: masked ? 'إظهار المبلغ' : 'إخفاء المبلغ',
+      toggleMask: () => this.setState({ masked: !this.state.masked })
+    };
+  }
+}
+</script>
+</body>
+</html>

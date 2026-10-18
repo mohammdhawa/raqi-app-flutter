@@ -1,0 +1,26 @@
+{"v":3,"createdOnFiles":{"v":1,"at":"2026-10-18T09:00:00Z"},"title":"Al-Raqi Employee App","launch":{"view":"canvas"},"pages":[],
+"boards":{
+"Main.dc.html":{"x":0,"y":0,"w":390,"h":844,"title":"01 · الرئيسية — موظف","is_interactive":true,"radius":36},
+"CheckIn.dc.html":{"x":470,"y":0,"w":390,"h":844,"title":"02 · تسجيل الحضور","is_interactive":true,"radius":36},
+"Attendance.dc.html":{"x":940,"y":0,"w":390,"h":844,"title":"03 · دوامي","is_interactive":true,"radius":36},
+"Requests.dc.html":{"x":1410,"y":0,"w":390,"h":844,"title":"04 · الطلبات","is_interactive":true,"radius":36},
+"LeaveForm.dc.html":{"x":1880,"y":0,"w":390,"h":844,"title":"05 · طلب إجازة","is_interactive":true,"radius":36},
+"RequestDetail.dc.html":{"x":2350,"y":0,"w":390,"h":844,"title":"06 · تفاصيل الطلب","is_interactive":true,"radius":36},
+"Salary.dc.html":{"x":0,"y":1300,"w":390,"h":844,"title":"07 · راتبي","is_interactive":true,"radius":36},
+"Account.dc.html":{"x":470,"y":1300,"w":390,"h":844,"title":"08 · حسابي","is_interactive":true,"radius":36},
+"Documents.dc.html":{"x":940,"y":1300,"w":390,"h":844,"title":"09 · مستنداتي والتعاميم","is_interactive":true,"radius":36},
+"Notifications.dc.html":{"x":1410,"y":1300,"w":390,"h":844,"title":"10 · الإشعارات","is_interactive":true,"radius":36},
+"Login.dc.html":{"x":1880,"y":1300,"w":390,"h":844,"title":"11 · الدخول الأول","is_interactive":true,"radius":36},
+"States.dc.html":{"x":2350,"y":1300,"w":390,"h":844,"title":"12 · حالات البطاقات","radius":36},
+"HomeManager.dc.html":{"x":0,"y":2600,"w":390,"h":844,"title":"13 · الرئيسية — مدير","is_interactive":true,"radius":36},
+"Team.dc.html":{"x":470,"y":2600,"w":390,"h":844,"title":"14 · فريقي","is_interactive":true,"radius":36},
+"HomeHR.dc.html":{"x":940,"y":2600,"w":390,"h":844,"title":"15 · الرئيسية — الموارد البشرية","is_interactive":true,"radius":36},
+"Foundations.dc.html":{"x":1410,"y":2600,"w":1330,"h":844,"title":"16 · أسس التصميم"}
+},
+"order":["Main.dc.html","CheckIn.dc.html","Attendance.dc.html","Requests.dc.html","LeaveForm.dc.html","RequestDetail.dc.html","Salary.dc.html","Account.dc.html","Documents.dc.html","Notifications.dc.html","Login.dc.html","States.dc.html","HomeManager.dc.html","Team.dc.html","HomeHR.dc.html","Foundations.dc.html"],
+"notes":{
+"rowA":{"x":0,"y":-300,"text":"رحلة الموظف اليومية — الحضور، الدوام، الطلبات","kind":"title1","maxW":2740},
+"rowB":{"x":0,"y":1000,"text":"الراتب، الملف، المستندات، الإشعارات، والدخول","kind":"title1","maxW":2740},
+"rowC":{"x":0,"y":2300,"text":"طبقة الأدوار — المدير والموارد البشرية · أسس التصميم","kind":"title1","maxW":2740}
+},
+"designSystems":[]}

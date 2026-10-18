@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>الدخول الأول</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#224167}a:hover{color:#1A3554}
+</style>
+</helmet>
+<div dir="rtl" style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; background: #FFFFFF; font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; color: #1B2A41; overflow: hidden">
+
+<sc-if value="{{isLogin}}" hint-placeholder-val="{{true}}">
+<div style="flex: 1; display: flex; flex-direction: column; padding: 48px 24px 32px; gap: 24px">
+<img src="/_blob/d78c9a1b032b296f9b0c82a9ce9728b0" alt="شركة الراقي" style="width: 170px; height: auto; align-self: center">
+<div style="display: flex; flex-direction: column; gap: 4px; text-align: center">
+<h1 style="margin: 0; font-size: 22px; font-weight: 800">تسجيل الدخول</h1>
+<p style="margin: 0; font-size: 14px; color: #6B7591">استخدم رقمك الوظيفي وكلمة المرور</p>
+</div>
+<sc-if value="{{hasError}}" hint-placeholder-val="{{false}}">
+<div role="alert" style="display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 12px; background: {{errBg}}; color: {{errFg}}">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; margin-top: 2px" aria-hidden="true"><path d="M12 3 2 20h20z"></path><path d="M12 10v4M12 17v.5"></path></svg>
+<span style="font-size: 14px; line-height: 1.6">{{errText}}</span>
+</div>
+</sc-if>
+<div style="display: flex; flex-direction: column; gap: 14px">
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 700">رقم الموظف
+<input type="text" inputmode="numeric" value="1042" dir="ltr" style="height: 52px; border: 1px solid #D2D6E0; border-radius: 12px; padding: 0 14px; font-family: inherit; font-size: 16px; text-align: right"></label>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 700">كلمة المرور
+<input type="password" value="temp-pass" style="height: 52px; border: 1px solid #D2D6E0; border-radius: 12px; padding: 0 14px; font-family: inherit; font-size: 16px"></label>
+</div>
+<button type="button" onClick="{{login}}" style="height: 54px; border: 0; border-radius: 14px; background: #224167; color: #FFFFFF; font-family: inherit; font-weight: 700; font-size: 17px; cursor: pointer">دخول</button>
+<p style="margin: 0; text-align: center; font-size: 13px; color: #6B7591; line-height: 1.7">نسيت كلمة المرور؟ تواصل مع قسم الموارد البشرية لإصدار كلمة مرور مؤقتة جديدة.</p>
+</div>
+</sc-if>
+
+<sc-if value="{{isChange}}" hint-placeholder-val="{{false}}">
+<div style="flex: 1; display: flex; flex-direction: column; padding: 40px 24px 32px; gap: 20px">
+<span aria-hidden="true" style="width: 56px; height: 56px; border-radius: 16px; background: #F2E4CC; color: #8A6A23; display: flex; align-items: center; justify-content: center"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg></span>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-size: 22px; font-weight: 800">عيّن كلمة مرور جديدة</h1>
+<p style="margin: 0; font-size: 14px; color: #6B7591; line-height: 1.7">كلمة المرور الحالية مؤقتة وصادرة من الموارد البشرية. لا يمكن استخدام التطبيق أو تسجيل الحضور قبل تغييرها.</p>
+</div>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 700">كلمة المرور الجديدة
+<input type="password" style="height: 52px; border: 1px solid #D2D6E0; border-radius: 12px; padding: 0 14px; font-family: inherit; font-size: 16px"></label>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 700">تأكيد كلمة المرور
+<input type="password" style="height: 52px; border: 1px solid #D2D6E0; border-radius: 12px; padding: 0 14px; font-family: inherit; font-size: 16px"></label>
+<p style="margin: 0; font-size: 13px; color: #6B7591">[شروط كلمة المرور حسب سياسة النظام]</p>
+<span style="flex: 1"></span>
+<button type="button" onClick="{{saved}}" style="height: 54px; border: 0; border-radius: 14px; background: #224167; color: #FFFFFF; font-family: inherit; font-weight: 700; font-size: 17px; cursor: pointer">حفظ ومتابعة</button>
+</div>
+</sc-if>
+
+<sc-if value="{{isPrimer}}" hint-placeholder-val="{{false}}">
+<div style="flex: 1; display: flex; flex-direction: column; padding: 40px 24px 32px; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-size: 22px; font-weight: 800">قبل أن تبدأ</h1>
+<p style="margin: 0; font-size: 14px; color: #6B7591; line-height: 1.7">سيطلب التطبيق ثلاث أذونات. يستخدمها فقط عند الحاجة إليها.</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; gap: 14px; align-items: flex-start; padding: 14px; border: 1px solid #E4E6EE; border-radius: 16px">
+<span aria-hidden="true" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; background: #E4F2EC; color: #2E7D5B; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round"><path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"></path><circle cx="12" cy="9" r="2.5"></circle></svg></span>
+<span style="display: flex; flex-direction: column"><span style="font-size: 15px; font-weight: 700">الموقع</span><span style="font-size: 13px; color: #6B7591; line-height: 1.6">لتأكيد مكانك لحظة تسجيل الحضور والانصراف فقط، دون تتبّع مستمر.</span></span>
+</div>
+<div style="display: flex; gap: 14px; align-items: flex-start; padding: 14px; border: 1px solid #E4E6EE; border-radius: 16px">
+<span aria-hidden="true" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; background: #E3ECF8; color: #2F5FA7; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg></span>
+<span style="display: flex; flex-direction: column"><span style="font-size: 15px; font-weight: 700">الكاميرا</span><span style="font-size: 13px; color: #6B7591; line-height: 1.6">لالتقاط صورة التسجيل وإرفاق المستندات بطلباتك.</span></span>
+</div>
+<div style="display: flex; gap: 14px; align-items: flex-start; padding: 14px; border: 1px solid #E4E6EE; border-radius: 16px">
+<span aria-hidden="true" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; background: #F2E4CC; color: #8A6A23; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg></span>
+<span style="display: flex; flex-direction: column"><span style="font-size: 15px; font-weight: 700">الإشعارات</span><span style="font-size: 13px; color: #6B7591; line-height: 1.6">لإبلاغك بإيداع الراتب وقرارات طلباتك والتعاميم.</span></span>
+</div>
+</div>
+<span style="flex: 1"></span>
+<a href="Main.dc.html" style="height: 54px; border-radius: 14px; background: #C8A36B; color: #1B2A41; font-weight: 700; font-size: 17px; text-decoration: none; display: flex; align-items: center; justify-content: center">متابعة</a>
+</div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"loginError":{"editor":"enum","options":["none","wrong","locked","inactive","network"],"default":"none","section":"حالة الدخول"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { step: 'login' };
+  }
+  renderVals() {
+    const err = this.props.loginError ?? 'none';
+    const E = {
+      wrong: ['رقم الموظف أو كلمة المرور غير صحيحة.', '#FBE7E5', '#8A1B17'],
+      locked: ['محاولات كثيرة. أعد المحاولة بعد دقيقة واحدة.', '#FAF2E1', '#6B5214'],
+      inactive: ['هذا الحساب غير مفعّل. تواصل مع قسم الموارد البشرية.', '#FBE7E5', '#8A1B17'],
+      network: ['تعذّر الاتصال بالخادم. تحقق من الشبكة ثم أعد المحاولة.', '#EEF0F6', '#3D4A63']
+    };
+    const e = E[err];
+    const step = this.state.step;
+    return {
+      isLogin: step === 'login', isChange: step === 'change', isPrimer: step === 'primer',
+      hasError: !!e, errText: e ? e[0] : '', errBg: e ? e[1] : '', errFg: e ? e[2] : '',
+      login: () => { if (!e) this.setState({ step: 'change' }); },
+      saved: () => this.setState({ step: 'primer' })
+    };
+  }
+}
+</script>
+</body>
+</html>

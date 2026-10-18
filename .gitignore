@@ -39,3 +39,6 @@ ios/Flutter/Generated.xcconfig
 ios/Flutter/flutter_export_environment.sh
 ios/Runner.xcworkspace/xcuserdata/
 ios/Runner.xcodeproj/xcuserdata/
+
+# Brainstorm / plan-execution scratch (superpowers)
+.superpowers/

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>حسابي</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#224167}a:hover{color:#1A3554}
+</style>
+</helmet>
+<div dir="rtl" style="position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; background: #F6F7FB; font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; color: #1B2A41; overflow: hidden">
+<div style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding: 20px 16px 24px">
+
+<section style="background: #FFFFFF; border: 1px solid #E4E6EE; border-radius: 20px; padding: 18px; display: flex; align-items: center; gap: 14px">
+<div style="position: relative; flex-shrink: 0">
+<div aria-hidden="true" style="width: 72px; height: 72px; border-radius: 999px; background: #F2E4CC; color: #224167; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px">س ح</div>
+<button type="button" aria-label="تحديث الصورة الشخصية" style="position: absolute; bottom: -4px; left: -4px; width: 32px; height: 32px; border-radius: 999px; border: 2px solid #FFFFFF; background: #224167; color: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+<span style="font-size: 19px; font-weight: 800">سامر الحلبي</span>
+<span style="font-size: 13px; color: #6B7591">مهندس مدني · الإدارة الهندسية</span>
+<span style="font-size: 13px; color: #6B7591">رقم الموظف <span dir="ltr" style="font-weight: 700; color: #1B2A41">1042</span></span>
+</div>
+</section>
+
+<section aria-labelledby="g1" style="display: flex; flex-direction: column; gap: 8px">
+<h2 id="g1" style="margin: 0; font-size: 14px; font-weight: 700; color: #6B7591">الملف الوظيفي</h2>
+<div style="background: #FFFFFF; border: 1px solid #E4E6EE; border-radius: 16px; display: flex; flex-direction: column">
+<button type="button" onClick="{{openPersonal}}" style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border: 0; border-bottom: 1px solid #E4E6EE; background: transparent; font-family: inherit; color: #1B2A41; text-align: right; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#224167" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path></svg>
+<span style="flex: 1; font-size: 15px">المعلومات الشخصية</span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9099AD" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></button>
+<button type="button" style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border: 0; border-bottom: 1px solid #E4E6EE; background: transparent; font-family: inherit; color: #1B2A41; text-align: right; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#224167" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"></rect><path d="M9 7V5h6v2M3 12h18"></path></svg>
+<span style="flex: 1; font-size: 15px">الوظيفة والقسم</span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9099AD" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></button>
+<button type="button" onClick="{{openContract}}" style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border: 0; border-bottom: 1px solid #E4E6EE; background: transparent; font-family: inherit; color: #1B2A41; text-align: right; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#224167" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M6 3h8l5 5v13H6z"></path><path d="M14 3v5h5M9 13h6M9 17h4"></path></svg>
+<span style="flex: 1; font-size: 15px">العقد</span>
+<span style="padding: 2px 10px; border-radius: 999px; background: #FDEBDD; color: #9A3412; font-size: 12px; font-weight: 700">ينتهي خلال 74 يوماً</span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9099AD" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></button>
+<button type="button" style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border: 0; border-bottom: 1px solid #E4E6EE; background: transparent; font-family: inherit; color: #1B2A41; text-align: right; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#224167" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="m2 9 10-5 10 5-10 5z"></path><path d="M6 11v5c3 2 9 2 12 0v-5"></path></svg>
+<span style="flex: 1; font-size: 15px">الشهادات</span><span style="font-size: 13px; color: #6B7591">2</span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9099AD" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></button>
+<button type="button" style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border: 0; border-bottom: 1px solid #E4E6EE; background: transparent; font-family: inherit; color: #1B2A41; text-align: right; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#224167" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="m3 17 6-6 4 4 8-8"></path><path d="M15 7h6v6"></path></svg>
+<span style="flex: 1; font-size: 15px">الخبرات السابقة</span><span style="font-size: 13px; color: #6B7591">3</span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9099AD" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></button>
+<button type="button" style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border: 0; background: transparent; font-family: inherit; color: #1B2A41; text-align: right; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#224167" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="9" cy="11" r="2"></circle><path d="M6 16c.6-1.5 1.7-2 3-2s2.4.5 3 2M14 10h4M14 13h3"></path></svg>
+<span style="flex: 1; font-size: 15px">الهوية وجواز السفر</span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9099AD" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></button>
+</div>
+</section>
+
+<section aria-labelledby="g2" style="display: flex; flex-direction: column; gap: 8px">
+<h2 id="g2" style="margin: 0; font-size: 14px; font-weight: 700; color: #6B7591">المستندات والتطوير</h2>
+<div style="background: #FFFFFF; border: 1px solid #E4E6EE; border-radius: 16px; display: flex; flex-direction: column">
+<a href="Documents.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border-bottom: 1px solid #E4E6EE; text-decoration: none; color: #1B2A41">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#224167" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+<span style="flex: 1; font-size: 15px">مستنداتي والتعاميم</span>
+<span style="padding: 2px 10px; border-radius: 999px; background: #FAF2E1; color: #6B5214; font-size: 12px; font-weight: 700">1 بانتظار الاطلاع</span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9099AD" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></a>
+<div style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 14px">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9099AD" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="5"></circle><circle cx="12" cy="12" r="1"></circle></svg>
+<span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 15px; color: #3D4A63">التقييم والتطوير</span><span style="font-size: 12px; color: #6B7591">التقييم الدوري، الأهداف، الدورات — ستتوفر قريباً</span></span>
+</div>
+</div>
+</section>
+
+<section aria-labelledby="g3" style="display: flex; flex-direction: column; gap: 8px">
+<h2 id="g3" style="margin: 0; font-size: 14px; font-weight: 700; color: #6B7591">الحساب والأمان</h2>
+<div style="background: #FFFFFF; border: 1px solid #E4E6EE; border-radius: 16px; display: flex; flex-direction: column">
+<button type="button" style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border: 0; border-bottom: 1px solid #E4E6EE; background: transparent; font-family: inherit; color: #1B2A41; text-align: right; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#224167" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2"></rect><path d="M11 18h2"></path></svg>
+<span style="flex: 1; font-size: 15px">الأجهزة المسجّلة</span><span style="font-size: 13px; color: #6B7591">2</span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9099AD" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></button>
+<button type="button" style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border: 0; border-bottom: 1px solid #E4E6EE; background: transparent; font-family: inherit; color: #1B2A41; text-align: right; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#224167" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+<span style="flex: 1; font-size: 15px">تغيير كلمة المرور</span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9099AD" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></button>
+<button type="button" style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border: 0; background: transparent; font-family: inherit; color: #B3261E; text-align: right; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M14 4h5v16h-5"></path><path d="M10 8l-4 4 4 4M6 12h10"></path></svg>
+<span style="flex: 1; font-size: 15px; font-weight: 600">تسجيل الخروج</span></button>
+</div>
+</section>
+<span style="text-align: center; font-size: 12px; color: #9099AD">تطبيق الموظف · الإصدار <span dir="ltr">2.0.0</span></span>
+</div>
+
+<nav aria-label="التنقل الرئيسي" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: #FFFFFF; border-top: 1px solid #E4E6EE; padding: 6px 4px 18px">
+<a href="Main.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 6px; min-height: 52px; color: #6B7591; font-size: 12px; text-decoration: none; border-top: 3px solid transparent">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"></path></svg>الرئيسية</a>
+<a href="Attendance.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 6px; min-height: 52px; color: #6B7591; font-size: 12px; text-decoration: none; border-top: 3px solid transparent">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>دوامي</a>
+<a href="Requests.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 6px; min-height: 52px; color: #6B7591; font-size: 12px; text-decoration: none; border-top: 3px solid transparent">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"></rect><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3"></path></svg>الطلبات</a>
+<a href="Salary.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 6px; min-height: 52px; color: #6B7591; font-size: 12px; text-decoration: none; border-top: 3px solid transparent">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"></rect><path d="M3 10h18M16 15h2"></path></svg>راتبي</a>
+<a href="Account.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 6px; min-height: 52px; color: #224167; font-weight: 700; font-size: 12px; text-decoration: none; border-top: 3px solid #C8A36B">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path></svg>حسابي</a>
+</nav>
+
+<sc-if value="{{sheetOpen}}" hint-placeholder-val="{{false}}">
+<div style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end">
+<button type="button" onClick="{{close}}" aria-label="إغلاق" style="flex: 1; border: 0; background: rgba(14,26,43,0.45); cursor: pointer"></button>
+<div role="dialog" aria-label="{{sheetTitle}}" style="background: #FFFFFF; border-radius: 24px 24px 0 0; padding: 10px 16px 28px; display: flex; flex-direction: column; gap: 12px">
+<span aria-hidden="true" style="align-self: center; width: 40px; height: 4px; border-radius: 999px; background: #D2D6E0"></span>
+<h2 style="margin: 0; font-size: 18px; font-weight: 800">{{sheetTitle}}</h2>
+<div style="border: 1px solid #E4E6EE; border-radius: 14px; display: flex; flex-direction: column">
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="5">
+<div style="display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid #E4E6EE"><span style="font-size: 14px; color: #6B7591">{{r.label}}</span><span style="font-size: 14px; font-weight: 700; color: {{r.fg}}">{{r.v}}</span></div>
+</sc-for>
+</div>
+<sc-if value="{{isContract}}" hint-placeholder-val="{{false}}">
+<a href="Documents.dc.html" style="height: 50px; border-radius: 14px; border: 1px solid #D2D6E0; color: #224167; font-weight: 700; font-size: 15px; text-decoration: none; display: flex; align-items: center; justify-content: center">عرض عقد العمل</a>
+</sc-if>
+<sc-if value="{{isPersonal}}" hint-placeholder-val="{{false}}">
+<a href="Requests.dc.html" style="height: 50px; border-radius: 14px; border: 1px solid #D2D6E0; color: #224167; font-weight: 700; font-size: 15px; text-decoration: none; display: flex; align-items: center; justify-content: center">طلب تحديث البيانات</a>
+</sc-if>
+</div>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { sheet: null };
+  }
+  renderVals() {
+    const s = this.state.sheet;
+    const ok = '#1B2A41', miss = '#9099AD';
+    const personal = [
+      ['الاسم الكامل', 'سامر محمد الحلبي', ok], ['رقم الهاتف', '0944 123 456', ok], ['العنوان', 'غير مسجّل', miss],
+      ['تاريخ الميلاد', '12/03/1992', ok], ['الحالة الاجتماعية', 'متزوج', ok]
+    ];
+    const contract = [
+      ['نوع التوظيف', 'متعاقد', ok], ['تاريخ بدء العمل', '01/01/2022', ok], ['بداية العقد الحالي', '01/01/2026', ok],
+      ['نهاية العقد', '31/12/2026', '#9A3412'], ['تجديد لعقد', '2025', ok]
+    ];
+    const rows = (s === 'contract' ? contract : personal).map(([label, v, fg]) => ({ label, v, fg }));
+    return {
+      sheetOpen: !!s,
+      isContract: s === 'contract',
+      isPersonal: s === 'personal',
+      sheetTitle: s === 'contract' ? 'العقد' : 'المعلومات الشخصية',
+      rows,
+      openPersonal: () => this.setState({ sheet: 'personal' }),
+      openContract: () => this.setState({ sheet: 'contract' }),
+      close: () => this.setState({ sheet: null })
+    };
+  }
+}
+</script>
+</body>
+</html>
