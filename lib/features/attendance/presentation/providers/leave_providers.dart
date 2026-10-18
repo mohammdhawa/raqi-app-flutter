@@ -5,6 +5,7 @@ import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../data/leave_repository.dart';
 import '../../data/leave_type_cache.dart';
 import '../../domain/leave.dart';
+import 'attendance_controller.dart';
 
 // ═══════════════════════════════════════════════════════════════════════
 //  SIMPLE READS — balance, types & managers
@@ -97,14 +98,18 @@ final leaveManagersProvider =
 /// The user's approved leave request covering today, if any — used by the
 /// attendance screen to surface an "إجازة معتمدة" status. Null when the user
 /// isn't on approved leave today (or the lookup fails).
+///
+/// Watches [currentLocalDayProvider] rather than reading the wall clock, so an
+/// app kept alive across midnight looks the new day up instead of keeping
+/// yesterday's leave on the hero.
 final approvedLeaveTodayProvider =
     FutureProvider.autoDispose<LeaveRequest?>((ref) async {
+  final today = ref.watch(currentLocalDayProvider);
   try {
     final requests = await ref.watch(leaveRepositoryProvider).myRequests(
           status: LeaveStatusFilter.approved,
-          year: DateTime.now().year,
+          year: today.year,
         );
-    final today = DateTime.now();
     for (final r in requests) {
       if (r.isApproved && r.coversDate(today)) return r;
     }
@@ -213,8 +218,12 @@ class MyLeaveRequestsController extends StateNotifier<LeaveListState> {
   }
 }
 
+/// Rebuilt — and so reloaded — whenever the signed-in user changes. Not
+/// autoDispose, so without that dependency the previous account's requests
+/// would survive a sign-out on a shared device.
 final myLeaveRequestsProvider =
     StateNotifierProvider<MyLeaveRequestsController, LeaveListState>((ref) {
+  ref.watch(currentUserProvider.select((u) => u?.id));
   return MyLeaveRequestsController(ref.watch(leaveRepositoryProvider));
 });
 
@@ -301,8 +310,10 @@ class LeaveApprovalsController extends StateNotifier<LeaveListState> {
   }
 }
 
+/// Scoped to the signed-in user like [myLeaveRequestsProvider].
 final leaveApprovalsProvider =
     StateNotifierProvider<LeaveApprovalsController, LeaveListState>((ref) {
+  ref.watch(currentUserProvider.select((u) => u?.id));
   return LeaveApprovalsController(ref.watch(leaveRepositoryProvider));
 });
 
