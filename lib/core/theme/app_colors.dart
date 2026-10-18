@@ -43,6 +43,26 @@ class AppColors {
   static const Color rejectedBg = Color(0xFFFBE7E5);
   static const Color rejectedText = Color(0xFF8A1B17);
 
+  // ── Attendance day states ──────────────────────────────────────────
+  static const Color dayPresent = Color(0xFF2E7D5B);
+  static const Color dayPresentBg = Color(0xFFE4F2EC);
+  static const Color dayPresentText = Color(0xFF1E5A3F);
+
+  static const Color dayLate = Color(0xFFC2410C);
+  static const Color dayLateBg = Color(0xFFFDEBDD);
+  static const Color dayLateText = Color(0xFF9A3412);
+
+  static const Color dayLeave = Color(0xFF2F5FA7);
+  static const Color dayLeaveBg = Color(0xFFE3ECF8);
+  static const Color dayLeaveText = Color(0xFF1F477F);
+
+  static const Color dayAbsentBg = Color(0xFFFBE7E5);
+  static const Color dayAbsentText = Color(0xFF8A1B17);
+
+  static const Color dayHoliday = Color(0xFF6B5CA5);
+  static const Color dayHolidayBg = Color(0xFFECE9F6);
+  static const Color dayHolidayText = Color(0xFF4A3F80);
+
   // ── Shadows ────────────────────────────────────────────────────────
   static const List<BoxShadow> shCard = [
     BoxShadow(
@@ -98,6 +118,7 @@ class AppColors {
   static const double rXl = 16;
   static const double r2xl = 18;
   static const double r3xl = 22;
+  static const double rSheet = 24;
   static const double pill = 999;
 
   // ── Legacy aliases ────────────────────────────────────────────────
