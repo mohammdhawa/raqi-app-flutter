@@ -127,6 +127,19 @@ void main() {
       expect(c.read(myLeaveRequestsProvider).requests.single.id, 2);
     });
 
+    test('signed out, neither list asks the server anything', () async {
+      late _PerUserLeaveRepository repo;
+      final c = containerWith((c) =>
+          repo = _PerUserLeaveRepository(() => c().read(user)?.id));
+      c.read(user.notifier).state = null;
+      c.listen(myLeaveRequestsProvider, (_, __) {});
+      c.listen(leaveApprovalsProvider, (_, __) {});
+      await _settle();
+      expect(repo.myRequestsCalls, 0);
+      expect(repo.approvalsCalls, 0);
+      expect(c.read(myLeaveRequestsProvider).requests, isEmpty);
+    });
+
     test('approvals reload for a new user', () async {
       late _PerUserLeaveRepository repo;
       final c = containerWith((c) =>

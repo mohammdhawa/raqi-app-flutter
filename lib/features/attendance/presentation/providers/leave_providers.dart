@@ -174,8 +174,11 @@ class LeaveListState {
 // ═══════════════════════════════════════════════════════════════════════
 
 class MyLeaveRequestsController extends StateNotifier<LeaveListState> {
-  MyLeaveRequestsController(this._repo) : super(const LeaveListState()) {
-    load();
+  /// Signed out ([signedIn] false) it holds an empty list and fetches
+  /// nothing — there is no session to ask with.
+  MyLeaveRequestsController(this._repo, {bool signedIn = true})
+      : super(const LeaveListState()) {
+    if (signedIn) load();
   }
 
   final LeaveRepository _repo;
@@ -220,11 +223,15 @@ class MyLeaveRequestsController extends StateNotifier<LeaveListState> {
 
 /// Rebuilt — and so reloaded — whenever the signed-in user changes. Not
 /// autoDispose, so without that dependency the previous account's requests
-/// would survive a sign-out on a shared device.
+/// would survive a sign-out on a shared device. Signed out, it fetches
+/// nothing: a request without a session would only come back 401.
 final myLeaveRequestsProvider =
     StateNotifierProvider<MyLeaveRequestsController, LeaveListState>((ref) {
-  ref.watch(currentUserProvider.select((u) => u?.id));
-  return MyLeaveRequestsController(ref.watch(leaveRepositoryProvider));
+  final userId = ref.watch(currentUserProvider.select((u) => u?.id));
+  return MyLeaveRequestsController(
+    ref.watch(leaveRepositoryProvider),
+    signedIn: userId != null,
+  );
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -232,9 +239,10 @@ final myLeaveRequestsProvider =
 // ═══════════════════════════════════════════════════════════════════════
 
 class LeaveApprovalsController extends StateNotifier<LeaveListState> {
-  LeaveApprovalsController(this._repo)
+  /// See [MyLeaveRequestsController.new] for [signedIn].
+  LeaveApprovalsController(this._repo, {bool signedIn = true})
       : super(const LeaveListState(statusFilter: LeaveStatusFilter.pending)) {
-    load();
+    if (signedIn) load();
   }
 
   final LeaveRepository _repo;
@@ -313,8 +321,11 @@ class LeaveApprovalsController extends StateNotifier<LeaveListState> {
 /// Scoped to the signed-in user like [myLeaveRequestsProvider].
 final leaveApprovalsProvider =
     StateNotifierProvider<LeaveApprovalsController, LeaveListState>((ref) {
-  ref.watch(currentUserProvider.select((u) => u?.id));
-  return LeaveApprovalsController(ref.watch(leaveRepositoryProvider));
+  final userId = ref.watch(currentUserProvider.select((u) => u?.id));
+  return LeaveApprovalsController(
+    ref.watch(leaveRepositoryProvider),
+    signedIn: userId != null,
+  );
 });
 
 // ═══════════════════════════════════════════════════════════════════════
