@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/services/personal_data_refresh.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/utils/format.dart';
@@ -9,6 +10,7 @@ import '../../../shared/widgets/card_kit.dart';
 import '../../attendance/domain/leave.dart';
 import '../../attendance/domain/month_days.dart';
 import '../../attendance/presentation/providers/attendance_controller.dart';
+import '../../attendance/presentation/providers/attendance_queue_controller.dart';
 import '../../attendance/presentation/providers/leave_providers.dart';
 import '../../attendance/presentation/providers/month_attendance_providers.dart';
 import '../../attendance/presentation/widgets/hero_today_card.dart';
@@ -71,60 +73,72 @@ class HomeScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.surface,
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _Header(user: user),
-            const SizedBox(height: 16),
-            HeroTodayCard(onOpenDay: () => context.go('/attendance')),
-            const SizedBox(height: 14),
-            if (anyFailed) ...[
-              balanceTile,
-              const SizedBox(height: 12),
-              monthTile,
-            ] else
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(child: balanceTile),
-                    const SizedBox(width: 12),
-                    Expanded(child: monthTile),
-                  ],
+        child: RefreshIndicator(
+          onRefresh: () => _refresh(ref),
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            children: [
+              _Header(user: user),
+              const SizedBox(height: 16),
+              HeroTodayCard(onOpenDay: () => context.go('/attendance')),
+              const SizedBox(height: 14),
+              if (anyFailed) ...[
+                balanceTile,
+                const SizedBox(height: 12),
+                monthTile,
+              ] else
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: balanceTile),
+                      const SizedBox(width: 12),
+                      Expanded(child: monthTile),
+                    ],
+                  ),
                 ),
-              ),
-            const SizedBox(height: 14),
-            const UnavailableCard(
-              title: 'الرواتب',
-              body: 'ستظهر هنا رواتبك وكشوفها عند تفعيل الخدمة.',
-            ),
-            if (attention.isNotEmpty) ...[
-              const SizedBox(height: 20),
-              Text('يحتاج انتباهك',
-                  style: AppTheme.title(color: AppColors.text)),
-              const SizedBox(height: 8),
-              for (final item in attention) ...[
-                _AttentionTile(item: item),
-                const SizedBox(height: 8),
-              ],
-            ],
-            if (canReview) ...[
-              const SizedBox(height: 12),
-              const _PendingDecisionsCard(),
-            ],
-            if (user != null && (user.isManager || user.isChief)) ...[
               const SizedBox(height: 14),
               const UnavailableCard(
-                title: 'فريقي اليوم',
-                body: 'حضور فريقك اليوم سيظهر هنا عند تفعيل الخدمة.',
-                icon: Icons.groups_outlined,
+                title: 'الرواتب',
+                body: 'ستظهر هنا رواتبك وكشوفها عند تفعيل الخدمة.',
               ),
+              if (attention.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                Text('يحتاج انتباهك',
+                    style: AppTheme.title(color: AppColors.text)),
+                const SizedBox(height: 8),
+                for (final item in attention) ...[
+                  _AttentionTile(item: item),
+                  const SizedBox(height: 8),
+                ],
+              ],
+              if (canReview) ...[
+                const SizedBox(height: 12),
+                const _PendingDecisionsCard(),
+              ],
+              if (user != null && (user.isManager || user.isChief)) ...[
+                const SizedBox(height: 14),
+                const UnavailableCard(
+                  title: 'فريقي اليوم',
+                  body: 'حضور فريقك اليوم سيظهر هنا عند تفعيل الخدمة.',
+                  icon: Icons.groups_outlined,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
   }
+
+  /// Today's attendance and queue, as دوامي reloads them, plus every other
+  /// personal source the cards read.
+  Future<void> _refresh(WidgetRef ref) => Future.wait([
+        ref.read(attendanceQueueProvider.notifier).refresh(),
+        ref.read(attendanceControllerProvider.notifier).reload(),
+        refreshPersonalData(ref),
+      ]);
 }
 
 class _Header extends StatelessWidget {

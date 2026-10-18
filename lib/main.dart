@@ -9,6 +9,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import 'core/providers/app_info_provider.dart';
 import 'core/router/app_router.dart';
+import 'core/services/personal_data_refresh.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/payload_ids.dart';
@@ -84,6 +85,9 @@ class _DocApprovalAppState extends ConsumerState<DocApprovalApp>
       if (ref.exists(attendanceControllerProvider)) {
         ref.read(attendanceControllerProvider.notifier).reload();
       }
+      // The rest of what the tabs show can have moved too — a leave decided,
+      // a document approved, HR refusing yesterday's record.
+      unawaited(refreshPersonalData(ref));
     }
   }
 

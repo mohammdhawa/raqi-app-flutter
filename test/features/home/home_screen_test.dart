@@ -147,4 +147,9 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('route:/requests'), findsOne);
   });
+
+  testWidgets('the home can be pulled to refresh', (t) async {
+    await _pump(t, _overrides());
+    expect(find.byType(RefreshIndicator), findsOne);
+  });
 }
