@@ -6,12 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/errors/api_failure.dart';
+import '../../../../core/services/personal_data_refresh.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_constants.dart';
 import '../../../auth/domain/user.dart';
 import '../../data/documents_repository.dart';
 import '../../domain/document.dart';
-import '../providers/documents_list_controller.dart';
 import '../../../../core/errors/error_log.dart';
 import '../../data/users_repository.dart';
 import '../../../../core/validation/approver_validation.dart';
@@ -209,10 +209,8 @@ class _CreateDocumentScreenState extends ConsumerState<CreateDocumentScreen> {
         attachments: _attachments.map((a) => a.file).toList(),
       );
 
-      for (final type in DocumentListType.values) {
-        // ignore: unawaited_futures
-        ref.read(documentsListProvider(type).notifier).refresh();
-      }
+      // The new document belongs at the top of طلباتي.
+      refreshDocumentFeeds(ref);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

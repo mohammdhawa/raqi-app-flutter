@@ -6,12 +6,12 @@ import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../../../core/errors/api_failure.dart';
 import '../../../../core/errors/error_log.dart';
+import '../../../../core/services/personal_data_refresh.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/user.dart';
 import '../../data/documents_repository.dart';
 import '../../domain/document.dart';
 import '../../domain/document_template.dart';
-import '../providers/documents_list_controller.dart';
 import '../../data/users_repository.dart';
 import '../../../../core/validation/approver_validation.dart';
 import '../../../../core/widgets/approver_picker_sheet.dart';
@@ -359,16 +359,16 @@ class _GeneratedDocumentFormScreenState
         attachments: _attachments.map((a) => a.file).toList(),
       );
 
-      for (final type in DocumentListType.values) {
-        ref.read(documentsListProvider(type).notifier).refresh();
-      }
+      // The new document belongs at the top of طلباتي.
+      refreshDocumentFeeds(ref);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم إنشاء المستند وإرساله للاعتماد.')),
       );
-      // Pop back through the template picker to the home screen.
-      context.go('/');
+      // Pop back through the template picker to الطلبات, where the user
+      // started and where the new document now heads طلباتي.
+      context.go('/requests');
     } on ApiFailure catch (failure) {
       // ── The generation killswitch ──────────────────────────────────
       //

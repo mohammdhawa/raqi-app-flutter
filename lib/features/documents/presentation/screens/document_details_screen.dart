@@ -8,17 +8,16 @@ import 'package:share_plus/share_plus.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 import '../../../../core/errors/api_failure.dart';
+import '../../../../core/services/personal_data_refresh.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_constants.dart';
 import '../../../../shared/widgets/authed_network_image.dart';
 import '../../../../shared/widgets/state_views.dart';
 import '../../../../shared/widgets/status_chip.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
-import '../../data/documents_repository.dart';
 import '../../domain/document.dart';
 import '../providers/document_comments_controller.dart';
 import '../providers/document_details_controller.dart';
-import '../providers/documents_list_controller.dart';
 import '../widgets/document_comments_section.dart';
 import '../widgets/workflow_stepper.dart';
 import '../../../../core/storage/token_storage.dart';
@@ -33,7 +32,7 @@ import '../../../../core/storage/token_storage.dart';
 //   if (updated != null) {
 //     WidgetsBinding.instance.addPostFrameCallback((_) {
 //       for (final type in DocumentListType.values) {
-//         if (ref.exists(documentsListProvider(type))) {
+//         if (ref.exists(documentsListProvider(type))) {   // since removed
 //           ref.read(documentsListProvider(type).notifier)
 //              .replaceDocument(updated);
 //         }
@@ -51,7 +50,7 @@ import '../../../../core/storage/token_storage.dart';
 //   3. addPostFrameCallback queues a callback for AFTER that next frame
 //      finishes drawing — i.e. during the _InactiveElements processing
 //      pass at the tail of the frame.
-//   4. Inside that post-frame callback we then mutate documentsListProvider
+//   4. Inside that post-frame callback we then mutated documentsListProvider
 //      for BOTH tabs. Those tabs are kept alive (AutomaticKeepAliveClient
 //      Mixin) underneath the navigator, so their state notifier listeners
 //      fire and they get marked dirty MID-DEACTIVATION.
@@ -64,7 +63,8 @@ import '../../../../core/storage/token_storage.dart';
 //
 // What this rewrite changes:
 //   * Approve/reject are State methods, not build-scope closures.
-//   * After the await, the cross-provider replaceDocument call runs
+//   * After the await, the cross-provider update (today: invalidating the
+//     requests feeds, see refreshDocumentFeeds) runs
 //     SYNCHRONOUSLY in the await-completion microtask — i.e. BEFORE the
 //     next frame, not after. All affected providers are mutated together,
 //     and the next frame's rebuild pass processes them coherently.
@@ -151,21 +151,13 @@ class _DocumentDetailsScreenState extends ConsumerState<DocumentDetailsScreen> {
     if (!mounted) return;
 
     if (success) {
-      _removeFromLists(documentId);
+      refreshDocumentFeeds(ref);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم حذف الوثيقة بنجاح.')),
       );
       Navigator.maybePop(context);
     } else {
       _scheduleErrorSnack();
-    }
-  }
-
-  void _removeFromLists(int id) {
-    for (final type in DocumentListType.values) {
-      if (ref.exists(documentsListProvider(type))) {
-        ref.read(documentsListProvider(type).notifier).removeDocument(id);
-      }
     }
   }
 
@@ -176,7 +168,7 @@ class _DocumentDetailsScreenState extends ConsumerState<DocumentDetailsScreen> {
     final updated = await controller.approve(note: note);
     if (!mounted) return;
     if (updated != null) {
-      _propagateToLists(updated);
+      refreshDocumentFeeds(ref);
       _scheduleSnack('تم اعتماد المستند.');
     } else {
       _scheduleErrorSnack();
@@ -188,19 +180,10 @@ class _DocumentDetailsScreenState extends ConsumerState<DocumentDetailsScreen> {
     final updated = await controller.reject(note: note);
     if (!mounted) return;
     if (updated != null) {
-      _propagateToLists(updated);
+      refreshDocumentFeeds(ref);
       _scheduleSnack('تم رفض المستند.');
     } else {
       _scheduleErrorSnack();
-    }
-  }
-
-  void _propagateToLists(Document updated) {
-    for (final type in DocumentListType.values) {
-      final exists = ref.exists(documentsListProvider(type));
-      if (exists) {
-        ref.read(documentsListProvider(type).notifier).replaceDocument(updated);
-      }
     }
   }
 
