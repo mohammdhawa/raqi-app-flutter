@@ -82,10 +82,18 @@ void main() {
           ],
         ));
     expect(find.text('بانتظار قراري'), findsOneWidget);
-    expect(find.textContaining('2'), findsWidgets);
+    // Exact badge text, wrapped in the LTR isolate marks.
+    expect(find.text(' (⁦2⁩)'), findsOneWidget);
     expect(find.text('طلبات تنتظر قرارك.'), findsOneWidget);
     expect(find.text('سارة'), findsOneWidget);
     expect(find.text('خالد'), findsOneWidget);
+  });
+
+  testWidgets('no count badge when the inbox is empty', (t) async {
+    await pumpTestApp(t, const RequestsScreen(),
+        overrides: _overrides(user: _manager));
+    expect(find.text('بانتظار قراري'), findsOneWidget);
+    expect(find.textContaining('('), findsNothing);
   });
 
   testWidgets('inbox segment can be switched to and from', (t) async {
